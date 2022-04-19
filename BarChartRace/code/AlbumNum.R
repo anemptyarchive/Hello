@@ -32,13 +32,12 @@ album_df
 
 # リリース数の集計 ---------------------------------------------------------------------
 
-### ・受け皿の作成 -----
+### ・期間の指定 -----
 
 # 期間を指定
 date_from <- "1998-01-01"
-date_from <- "2014-01-01"
 date_to   <- "2022-04-15"
-data_to   <- lubridate::now()
+date_to   <- lubridate::now()
 
 # 月ベクトルを作成
 date_vec <- seq(
@@ -50,6 +49,7 @@ date_vec <- seq(
     lubridate::floor_date(unit = "mon"), 
   by = "mon"
 )
+length(date_vec)
 
 
 ### ・アーティスト名の編集 -----
@@ -63,17 +63,22 @@ album_category <- c("オリジナルアルバム", "ベストアルバム", "ミ
 # アーティスト名を確認
 unique(album_df[["artistName"]])
 
+# 連名作品を指定
+pattern_vec <- c("モーニング娘。&平家みちよ", "市井紗耶香 with 中澤裕子", "中澤裕子/メロン記念日/松浦亜弥/石井リカ", "タンポポ/プッチモニ", "中澤裕子/後藤真希/藤本美貴", "モーニング娘。'14/スマイレージ")
+replace_vec <- c("モーニング娘。", "平家みちよ", "市井紗耶香", "中澤裕子", "中澤裕子", "メロン記念日", "松浦亜弥", "石井リカ", "中澤裕子", "後藤真希", "藤本美貴", "タンポポ", "プッチモニ", "モーニング娘。'14", "スマイレージ")
+n_vec <- c(2, 2, 4, 3, 2, 2)
+
 # 連名作品を分割
 tmp_album_df <- album_df %>% 
-  dplyr::filter(artistName == "タンポポ/プッチモニ") %>% # 連名の作品を抽出
-  tibble::add_column(n = 2) %>% # 複製数を追加
+  dplyr::filter(artistName %in% pattern_vec) %>% # 連名の作品を抽出
+  tibble::add_column(n = n_vec) %>% # 複製数を追加
   tidyr::uncount(n) %>% # 作品を複製
-  dplyr::mutate(artistName = c("タンポポ", "プッチモニ")) # 個々のアーティスト名に再設定
+  dplyr::mutate(artistName = replace_vec) # 個々のアーティスト名を再設定
 tmp_album_df
 
 # アーティスト名を編集してリリース数を集計
 release_n_df <- album_df %>% 
-  dplyr::filter(artistName != "タンポポ/プッチモニ") %>% # 連名作品を削除
+  dplyr::filter(!(artistName %in% pattern_vec)) %>% # 連名作品を削除
   rbind(tmp_album_df) %>% # 分割した連名作品を追加
   dplyr::filter(albumCategory %in% album_category) %>% # 指定したカテゴリを抽出
   dplyr::filter(releaseDate >= min(date_vec), releaseDate <= max(date_vec)) %>% # 指定した期間内の作品を抽出
@@ -81,11 +86,12 @@ release_n_df <- album_df %>%
   dplyr::mutate(
     release_date = lubridate::floor_date(releaseDate, unit = "mon"), # 月単位に切り捨て
     artist_name = artistName %>% # グラフ表示名を追加
+      #stringr::str_replace(pattern = "℃-ute", replacement = "C-ute") %>% # 作図時に豆腐化するので代用
       stringr::str_replace(pattern = "月島きらり.*", replacement = "月島きらり(久住小春)") %>% # 長いので省略
-      stringr::str_replace(pattern = "太陽とシスコムーン/T&Cボンバー", replacement = "太陽とシスコムーン"), #%>% # 改名前に変更
-      #stringr::str_replace(pattern = "℃-ute", replacement = "C-ute"), # 作図時に豆腐化するので代用
+      stringr::str_replace(pattern = "太陽とシスコムーン/T&Cボンバー", replacement = "太陽とシスコムーン"), # 改名前に変更
     artist_idname = artist_name %>% # id割り当て用に編集
       stringr::str_replace(pattern = "モーニング娘。.*", replacement = "モーニング娘。") %>% # ナンバリングを削除
+      stringr::str_replace(pattern = "中澤ゆうこ", replacement = "中澤裕子") %>% # ソロ用名義を名前に統一
       stringr::str_replace(pattern = "T&Cボンバー", replacement = "太陽とシスコムーン") %>% # 改名前に統一
       stringr::str_replace(pattern = "アンジュルム", replacement = "スマイレージ"), # 改名前に統一
     artist_idname = factor(artist_idname, levels = unique(artist_idname)), # レベル設定のため因子型に変換
@@ -96,7 +102,7 @@ release_n_df <- album_df %>%
   dplyr::filter(release_n == max(release_n)) %>% # 同じ月に複数リリースしていると重複するので遅い方を採用
   dplyr::ungroup() %>% # グループ化を解除
   #dplyr::select(release_date, artist_id, artist_idname, artist_name, artistName, release_n) %>% # 利用する列を選択:(確認用)
-  dplyr::select(release_date, artist_id, artist_name, release_n) %>% # 利用する列を選択:(描画用)
+  dplyr::select(release_date, artist_id, artist_name, release_n) %>% # 利用する列を選択:(集計用)
   dplyr::arrange(release_date, artist_id) # 昇順に並び替え
 release_n_df
 
@@ -105,45 +111,34 @@ unique(release_n_df[["artist_idname"]])
 unique(release_n_df[["artist_name"]])
 
 
-### ・アニメ用の小細工 -----
-
-## バーの変化を強調するためにリリース1か月前のデータを含めたい
-
-# 1枚目のリリース前月のデータを作成
-release_0_df <- release_n_df %>% 
-  dplyr::group_by(artist_id) %>% # アーティストでグループ化
-  dplyr::filter(release_date == min(release_date)) %>% # 1枚目の作品を抽出
-  dplyr::ungroup() %>% # グループ化の解除
-  dplyr::mutate(
-    release_date = release_date %>% 
-      lubridate::rollback() %>% 
-      lubridate::floor_date(unit = "mon"), 
-    artist_name = " ", 
-    release_n = 0
-  ) %>% # 1か月前のデータに書き換え
-  dplyr::filter(release_date >= min(date_vec), release_date <= max(date_vec)) # 期間内のデータを抽出
-release_0_df
-
-
-### ・月情報とアーティスト名の対応 -----
-
-# アーティスト数を取得
-artist_size <- max(release_n_df[["artist_id"]])
+### ・アーティスト名の対応 -----
 
 # 月情報とアーティスト名の対応データフレームを作成
 date_df <- tibble::tibble()
-for(i in 1:artist_size) {
+for(i in 1:max(release_n_df[["artist_id"]])) {
   # i番目のアーティストのデータを抽出
   tmp_artist_df <- release_n_df %>% 
     dplyr::filter(artist_id == i) %>% # i番目のアーティストを抽出
-    dplyr::select(date_from = release_date, artist_name) %>% # 月・アーティスト名の列を選択
-    dplyr::distinct(artist_name, .keep_all = TRUE) %>% # 重複を削除
-    dplyr::mutate(date_to = dplyr::lead(date_from, n = 1, default = max(date_vec))) # 月をズラして複製
+    dplyr::select(artist_name, date_from = release_date) %>% # アーティスト名と月の列を選択
+    dplyr::mutate(date_to = dplyr::lead(date_from, n = 1, default = max(date_vec))) # 月の列をズラして複製
   
   # 月とアーティスト名を対応
-  if(nrow(tmp_artist_df) > 1) {
+  if(length(unique(tmp_artist_df[["artist_name"]])) == 1) { # 非改名アーティストの場合
     
-    # 改名アーティストの場合
+    # 月データフレームを作成
+    tmp_date_df <- tibble::tibble(
+      release_date = seq(
+        from = tmp_artist_df[["date_from"]][1], 
+        to = tmp_artist_df[["date_to"]][nrow(tmp_artist_df)], 
+        by = "mon"
+      ), 
+      artist_id = i, 
+      artist_name = tmp_artist_df[["artist_name"]][1]
+    )
+    
+  } else { # 改名アーティストの場合
+    
+    # 作品ごとに処理
     tmp_date_df <- tibble::tibble()
     for(j in 1:nrow(tmp_artist_df)) {
       
@@ -174,18 +169,6 @@ for(i in 1:artist_size) {
       # 同じアーティストの月データフレームを結合
       tmp_date_df <- rbind(tmp_date_df, tmp_df)
     }
-  } else {
-    # 非改名アーティストの場合
-    # 月データフレームを作成
-    tmp_date_df <- tibble::tibble(
-      release_date = seq(
-        from = tmp_artist_df[["date_from"]], 
-        to = tmp_artist_df[["date_to"]], 
-        by = "mon"
-      ), 
-      artist_id = i, 
-      artist_name = tmp_artist_df[["artist_name"]]
-    )
   }
   
   # 全てのアーティストの月データフレームを結合
@@ -193,6 +176,26 @@ for(i in 1:artist_size) {
     dplyr::arrange(release_date, artist_id) # 昇順に並び替え
 }
 date_df
+
+
+### ・アニメ用の小細工 -----
+
+## バーの変化を強調するために1枚目のリリース1か月前のデータを含めたい
+
+# 1枚目のリリース前月のデータを作成
+release_0_df <- release_n_df %>% 
+  dplyr::group_by(artist_id) %>% # アーティストでグループ化
+  dplyr::filter(release_date == min(release_date)) %>% # 1枚目の作品を抽出
+  dplyr::ungroup() %>% # グループ化の解除
+  dplyr::mutate(
+    release_date = release_date %>% 
+      lubridate::rollback() %>% 
+      lubridate::floor_date(unit = "mon"), 
+    artist_name = " ", 
+    release_n = 0
+  ) %>% # 1か月前のデータに書き換え
+  dplyr::filter(release_date >= min(date_vec), release_date <= max(date_vec)) # 期間内のデータを抽出
+release_0_df
 
 
 ### ・順位付け -----
@@ -222,7 +225,7 @@ rank_df
 
 # アニメーションの作成 --------------------------------------------------------------
 
-### ・バーチャートレース -----
+### ・フレーム数の設定 -----
 
 # 遷移フレーム数を指定
 t <- 8
@@ -239,6 +242,10 @@ e <- (t + s) * mps * n
 
 # フレーム数を取得
 frame_n <- length(unique(rank_df[["release_date"]]))
+frame_n
+
+
+### ・バーチャートレース -----
 
 # バーチャートレースを作成:(y軸可変)
 anim <- ggplot(rank_df, aes(x = ranking, y = release_n, fill = artist_id, color = artist_id)) + 
@@ -270,7 +277,7 @@ anim <- ggplot(rank_df, aes(x = ranking, y = release_n, fill = artist_id, color 
   gganimate::view_follow(fixed_x = TRUE) + # 表示範囲の調整
   labs(
     title = paste0(
-      "ハロプログループのアルバムリリース数の推移", 
+      "ハロプロアーティストのアルバムリリース数の推移", 
       ":(", lubridate::year(date_from), "年", lubridate::month(date_from), "月以降)"
     ), 
     subtitle = "{lubridate::year(closest_state)}年{lubridate::month(closest_state)}月", 
@@ -286,7 +293,7 @@ g <- gganimate::animate(
 g
 
 # gif画像を保存
-gganimate::anim_save(filename = "BarChartRace/output/AlbumNum_2014.gif", animation = g)
+gganimate::anim_save(filename = "BarChartRace/output/AlbumNum.gif", animation = g)
 
 
 # 動画を作成と保存
@@ -294,7 +301,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = frame_n*(t+s)+e, end_pause = e, fps = (t+s)*mps, 
   width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = "BarChartRace/output/AlbumNum_2014.mp4")
+  renderer = gganimate::av_renderer(file = "BarChartRace/output/AlbumNum.mp4")
 )
 
 
