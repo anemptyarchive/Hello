@@ -30,7 +30,7 @@ album_df <- readr::read_csv(
 album_df
 
 
-# リリース数の集計 ---------------------------------------------------------------------
+# 期間とアーティスト名の設定 ---------------------------------------------------------------------
 
 ### ・期間の指定 -----
 
@@ -110,6 +110,8 @@ release_n_df
 unique(release_n_df[["artist_idname"]])
 unique(release_n_df[["artist_name"]])
 
+
+# リリース数の集計 ---------------------------------------------------------------------
 
 ### ・アーティスト名の対応 -----
 
@@ -234,7 +236,7 @@ t <- 8
 s <- 2
 
 # 1秒間に表示する月数を指定:(値が大きいと意図した通りにならない)
-mps <- 4
+mps <- 3
 
 # 最終結果をn秒間表示するフレーム数を計算:(フレーム数が少ないときしかムリっぽい)
 n <- 5
@@ -263,13 +265,13 @@ anim <- ggplot(rank_df, aes(x = ranking, y = release_n, fill = artist_id, color 
     axis.ticks.y = element_blank(), # y軸の目盛指示線
     #panel.grid.major.x = element_line(color = "grey", size = 0.1), # x軸の主目盛線
     panel.grid.major.y = element_blank(), # y軸の主目盛線
-    panel.grid.minor.x = element_blank(), # x軸の補助目盛線
+    #panel.grid.minor.x = element_blank(), # x軸の補助目盛線
     panel.grid.minor.y = element_blank(), # y軸の補助目盛線
     panel.border = element_blank(), # グラフ領域の枠線
     #panel.background = element_blank(), # グラフ領域の背景
     plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
     plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
-    plot.margin = margin(t = 10, r = 40, b = 10, l = 130, unit = "pt"), # 全体の余白
+    plot.margin = margin(t = 10, r = 50, b = 10, l = 150, unit = "pt"), # 全体の余白
     legend.position = "none" # 凡例の表示位置
   ) + # 図の体裁
   coord_flip(clip = "off", expand = FALSE) + # 軸の入れ変え
@@ -277,7 +279,7 @@ anim <- ggplot(rank_df, aes(x = ranking, y = release_n, fill = artist_id, color 
   gganimate::view_follow(fixed_x = TRUE) + # 表示範囲の調整
   labs(
     title = paste0(
-      "ハロプロアーティストのアルバムリリース数の推移", 
+      "ハロプロアーティストのリリース数の推移", 
       ":(", lubridate::year(date_from), "年", lubridate::month(date_from), "月以降)"
     ), 
     subtitle = "{lubridate::year(closest_state)}年{lubridate::month(closest_state)}月", 
@@ -288,20 +290,20 @@ anim <- ggplot(rank_df, aes(x = ranking, y = release_n, fill = artist_id, color 
 g <- gganimate::animate(
   plot = anim, 
   nframes = frame_n*(t+s)+e, end_pause = e, fps = (t+s)*mps, 
-  width = 900, height = 600
+  width = 900, height = 800
 )
 g
 
 # gif画像を保存
-gganimate::anim_save(filename = "BarChartRace/output/AlbumNum.gif", animation = g)
+gganimate::anim_save(filename = "BarChartRace/output/ReleaseNum.gif", animation = g)
 
 
 # 動画を作成と保存
 m <- gganimate::animate(
   plot = anim, 
   nframes = frame_n*(t+s)+e, end_pause = e, fps = (t+s)*mps, 
-  width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = "BarChartRace/output/AlbumNum.mp4")
+  width = 900, height = 800, 
+  renderer = gganimate::av_renderer(file = "BarChartRace/output/ReleaseNum.mp4")
 )
 
 

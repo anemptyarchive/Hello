@@ -49,7 +49,7 @@ join_df
 # 期間を指定
 date_from <- "2015-08-01"
 date_to   <- "2022-04-15"
-data_to   <- lubridate::now()
+date_to   <- lubridate::now()
 
 # 月単位に切り捨て
 date_from <- date_from %>% 
@@ -174,7 +174,7 @@ member_0_df <- rbind(rename_group_df, nonrename_group_df) %>% # 改名・非改�
 member_0_df
 
 
-### ・グループ名の処理 -----
+### ・グループ名の対応 -----
 
 ## 改名組の表示名に対応したい
 
@@ -219,7 +219,7 @@ group_name_df
 
 ### ・順位付け -----
 
-# 期間ごとのメンバー数を順位付け
+# メンバー数で順位付け
 rank_df <- member_n_df %>% 
   rbind(member_0_df) %>% # 在籍なし期間を結合:(小細工する場合)
   dplyr::arrange(date, groupID) %>% # 昇順に並び替え
