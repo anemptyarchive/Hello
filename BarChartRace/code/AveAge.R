@@ -1,5 +1,5 @@
 
-# グループごとの平均年齢の推移を可視化 -------------------------------------------------------------------
+# グループごとの平均年齢・平均活動年数の推移を可視化 -------------------------------------------------------------------
 
 # 利用パッケージ
 library(tidyverse)
@@ -28,7 +28,8 @@ member_df <- readr::read_csv(
     memberKana = "c", 
     birthDate = readr::col_date(format = "%Y/%m/%d")
   )
-)
+) %>% 
+  dplyr::arrange(memberID)
 member_df
 
 # 加入・卒業日一覧
@@ -40,7 +41,8 @@ join_df <- readr::read_csv(
     joinDate = readr::col_date(format = "%Y/%m/%d"), 
     gradDate = readr::col_date(format = "%Y/%m/%d")
   )
-)
+) %>% 
+  dplyr::arrange(joinDate, memberID, groupID)
 join_df
 
 # グループ一覧
@@ -53,7 +55,8 @@ group_df <- readr::read_csv(
     dissolveDate = readr::col_date(format = "%Y/%m/%d"), 
     isUnit = "l"
   )
-)
+) %>% 
+  dplyr::arrange(groupID, formDate)
 group_df
 
 
@@ -74,29 +77,34 @@ date_vec <- seq(
     lubridate::floor_date(unit = "mon"), 
   by = "mon"
 )
+length(date_vec) # フレーム数
 
 
-# アニメーションの演出用 ------------------------------------------------------------------
+# 演出用の処理 ------------------------------------------------------------------
 
-### ・グループ名の対応 -----
-
-## 改名組の表示名に対応したい
+### ・グループ名の対応:(改名組の表示名に対応したい) -----
 
 # 月・グループID・グループ名の対応表を作成
 group_name_df <- tibble::tibble()
 for(i in 1:nrow(group_df)) {
-  # i番目のグループの結成日と解散日を取得
+  # 結成日を取得
   tmp_date_from <- group_df[["formDate"]][i]
-  if(is.na(group_df[["dissolveDate"]][i])) {
-    tmp_date_to <- lubridate::as_date(lubridate::now()) # 活動中であれば現在の日時
-  } else {
+  
+  # 解散日を取得
+  if(!is.na(group_df[["dissolveDate"]][i])) {
     tmp_date_to <- group_df[["dissolveDate"]][i]
+  } else {
+    # 活動中であれば現在の日時を設定
+    tmp_date_to <- lubridate::now() %>% 
+      lubridate::as_date()
   }
   
   # 月ベクトルを作成
   tmp_date_vec <- seq(
-    from = lubridate::floor_date(tmp_date_from, unit = "mon"), 
-    to = lubridate::floor_date(tmp_date_to, unit = "mon"), 
+    from = tmp_date_from %>% 
+      lubridate::floor_date(unit = "mon"), 
+    to = tmp_date_to %>% 
+      lubridate::floor_date(unit = "mon"), 
     by = "mon"
   )
   
@@ -115,32 +123,28 @@ for(i in 1:nrow(group_df)) {
 
 # 改名が月途中だと重複するのでその対応
 group_name_df <- group_name_df %>% 
-  dplyr::arrange(groupID, date) %>% # 昇順に並び替え
   dplyr::group_by(date, groupID) %>% # 日付とグループでグループ化
-  dplyr::mutate(row_num = dplyr::row_number()) %>% # 重複を確認
-  dplyr::filter(row_num == max(row_num)) %>% # 重複する場合は新しい方を抽出
-  dplyr::ungroup() %>% # 
-  dplyr::select(!row_num) # 不要な列を削除
+  dplyr::slice_max(formDate) %>% # 重複する場合は新しい方を抽出
+  dplyr::ungroup() %>% # グループを解除
+  dplyr::arrange(date, groupID) # 昇順に並び替え
 group_name_df
 
 
-### ・アニメ用の小細工 -----
-
-## バーの変化を強調するために結成前月と解散月をデータに含めたい
+### ・結成前月と解散月の追加:(バーの変化を強調したい) -----
 
 # 改名グループを抽出
 tmp_rename_group_df <- group_df %>% 
   dplyr::select(groupID, groupName, formDate, dissolveDate) %>% # 利用する列を選択
   dplyr::group_by(groupID) %>% # グループごとにグループ化
   dplyr::filter(formDate != min(formDate) | formDate != max(formDate)) %>% # 改名グループを抽出
-  dplyr::ungroup() %>% # グループ化の解除
+  dplyr::ungroup() %>% # グループ化を解除
   dplyr::arrange(groupID, formDate) # 昇順に並び替え
 tmp_rename_group_df
 
 # 改名グループの結成月と解散月を再設定
 rename_group_df <- tibble::tibble()
 for(i in unique(tmp_rename_group_df[["groupID"]])) {
-  # i番目の改名グループを抽出
+  # i番目のグループを抽出
   tmp_df1 <- tmp_rename_group_df %>% 
     dplyr::filter(groupID == i)
   
@@ -158,16 +162,16 @@ for(i in unique(tmp_rename_group_df[["groupID"]])) {
 rename_group_df
 
 # 非改名グループを抽出
-nonrename_group_df <- group_df %>% 
+notrename_group_df <- group_df %>% 
   dplyr::select(groupID, groupName, formDate, dissolveDate) %>% # 利用する列を選択
   dplyr::group_by(groupID) %>% # グループごとにグループ化
   dplyr::filter(formDate == min(formDate), formDate == max(formDate)) %>% # 非改名グループを抽出
-  dplyr::ungroup() %>% # グループ化の解除
+  dplyr::ungroup() %>% # グループ化を解除
   dplyr::arrange(groupID, formDate) # 昇順に並び替え
-nonrename_group_df
+notrename_group_df
 
-# 結成・解散月を取得
-member_0_df <- dplyr::bind_rows(rename_group_df, nonrename_group_df) %>% # 改名・非改名グループを結合
+# 結成前月・解散月を取得
+member_0_df <- dplyr::bind_rows(rename_group_df, notrename_group_df) %>% # 改名・非改名グループを結合
   dplyr::mutate(
     formDate = formDate %>% 
       lubridate::rollback() %>% # 結成1か月前に変更
@@ -178,8 +182,8 @@ member_0_df <- dplyr::bind_rows(rename_group_df, nonrename_group_df) %>% # 改�
     cols = c(formDate, dissolveDate), 
     names_to = "date_type", 
     values_to = "date"
-  ) %>% # 結成・解散月を同じ列に変換
-  dplyr::select(date, groupID, groupName) %>% # 月・グループの列を選択
+  ) %>% # 結成前月・解散月を同じ列に変換
+  dplyr::select(date, groupID, groupName) %>% # 月とグループの列を選択
   dplyr::mutate(
     groupName = " ", 
     moonage = 0, 
@@ -188,7 +192,7 @@ member_0_df <- dplyr::bind_rows(rename_group_df, nonrename_group_df) %>% # 改�
   ) %>% # メンバー数(0人)を追加
   dplyr::filter(!is.na(date)) %>% # 現在活動中のグループの解散月を除去
   dplyr::arrange(date, groupID) %>% # 昇順に並び替え
-  dplyr::filter(date > min(date_vec), date < max(date_vec))
+  dplyr::filter(date > min(date_vec), date < max(date_vec)) # 指定した期間内のデータを抽出
 member_0_df
 
 
@@ -199,22 +203,18 @@ date_size   <- length(date_vec)
 group_size  <- max(group_df[["groupID"]])
 member_size <- max(member_df[["memberID"]])
 
-# 受け皿を作成
-date_df <- tibble::tibble(
+# 平均年齢を集計
+rank_df <- tibble::tibble(
   date = rep(date_vec, each = group_size*member_size), 
   groupID = rep(rep(1:group_size, times = date_size), each = member_size), 
   memberID = rep(1:member_size, times = date_size*group_size)
-)
-date_df
-
-# 集計
-rank_df <- date_df %>% 
+) %>% # 全ての組み合わせを作成
   dplyr::left_join(
     group_name_df %>% 
       dplyr::mutate(
         formDate = lubridate::floor_date(formDate, unit = "mon"), 
         dissolveDate = lubridate::floor_date(dissolveDate, unit = "mon")
-      ), 
+      ), # 月単位に切り捨て
     by = c("date", "groupID")
   ) %>% # グループ情報を結合
   dplyr::filter(date >= formDate, date <= dissolveDate | is.na(dissolveDate)) %>% # 活動中のグループを抽出
@@ -224,7 +224,7 @@ rank_df <- date_df %>%
       dplyr::mutate(
         joinDate = lubridate::floor_date(joinDate, unit = "mon"), 
         gradDate = lubridate::floor_date(gradDate, unit = "mon")
-      ), 
+      ), # 月単位に切り捨て
     by = c("groupID", "memberID")
   ) %>% # 加入メンバー情報を結合
   dplyr::filter(date >= joinDate, date < gradDate | is.na(gradDate)) %>% # グループ活動中のメンバーを抽出
@@ -234,18 +234,20 @@ rank_df <- date_df %>%
       dplyr::distinct(memberID, .keep_all = TRUE), # 重複を除去
     by = "memberID"
   ) %>% # メンバー情報を結合
-  dplyr::select(date, groupID, groupName, memberID, memberName, birthDate) %>% # 利用する列を選択
+  #dplyr::select(date, groupID, groupName, memberID, memberName, start_date = birthDate) %>% # 利用する列を選択:(平均年齢用)
+  dplyr::mutate(HPjoinDate = lubridate::floor_date(HPjoinDate, unit  = "mon")) %>% # 月単位に切り捨て:(平均芸歴用)
+  dplyr::select(date, groupID, groupName, memberID, memberName, start_date = HPjoinDate) %>% # 利用する列を選択:(平均芸歴用)
   dplyr::mutate(
-    moonage = lubridate::interval(start = birthDate, end = date) %>% 
+    moonage = lubridate::interval(start = start_date, end = date) %>% 
       lubridate::time_length(unit = "mon")
-  ) %>% 
+  ) %>% # メンバーの月齢を計算
   dplyr::group_by(date, groupID, groupName) %>% # 平均月齢の計算用にグループ化
   dplyr::summarise(
     moonage = sum(moonage, na.rm = TRUE), 
-    member_n = sum(!is.na(birthDate)), 
+    member_n = sum(!is.na(start_date)), 
     .groups = "drop"
-  ) %>% # 総月齢とメンバー数を計算
-  dplyr::mutate(average_moonage = moonage / member_n) %>% # 平均月齢を計算
+  ) %>% # グループの総月齢と(計算に使った)メンバー数を計算
+  dplyr::mutate(average_moonage = moonage / member_n) %>% # グループの平均月齢を計算
   dplyr::bind_rows(member_0_df) %>% # 結成前月・解散月を追加
   dplyr::arrange(date, average_moonage, groupID) %>% # ランク付け用に昇順に並べ替え
   dplyr::group_by(date) %>% # ランク付け用にグループ化
@@ -254,9 +256,9 @@ rank_df <- date_df %>%
     year = average_moonage %/% 12, 
     month = round(average_moonage %% 12, digits = 1), 
     ranking = dplyr::row_number(-average_moonage), 
-  ) %>% # 
+  ) %>% # ランク付けとラベル用の値を追加
   dplyr::ungroup() %>% # グループ化の解除
-  #dplyr::select(date, groupID, groupName, moonage, member_n, average_moonage, year, month, ranking) %>% # 利用する列を選択:(確認用)
+  #dplyr::select(date, groupID, groupName, member_n, moonage, average_moonage, year, month, ranking) %>% # 利用する列を選択:(確認用)
   dplyr::select(date, groupID, groupName, average_moonage, year, month, ranking) %>% # 利用する列を選択:(集計用)
   dplyr::arrange(date, ranking) # 昇順に並べ替え
 rank_df
@@ -306,7 +308,7 @@ n <- length(unique(rank_df[["date"]]))
 anim <- ggplot(rank_df, aes(x = ranking, y = average_moonage, fill = groupID, color = groupID)) + 
   geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 平均月齢バー
   geom_text(aes(y = 0, label = paste(groupName, " ")), hjust = 1) + # グループ名ラベル
-  geom_text(aes(label = paste(" ", year, "歳", month, "か月")), hjust = 0) + # 平均年齢ラベル
+  geom_text(aes(label = paste(" ", year, "年", month, "か月")), hjust = 0) + # 平均年齢ラベル
   gganimate::transition_states(states = date, transition_length = t, state_length = s, wrap = FALSE) + # フレーム
   gganimate::ease_aes("cubic-in-out") + # アニメーションの緩急
   gganimate::view_follow(fixed_x = TRUE) + # 表示範囲のフィット
@@ -330,7 +332,7 @@ anim <- ggplot(rank_df, aes(x = ranking, y = average_moonage, fill = groupID, co
     plot.margin = margin(t = 10, r = 100, b = 10, l = 150, unit = "pt"), # 全体の余白
     legend.position = "none" # 凡例の表示位置
   ) + # 図の体裁
-  labs(title = "ハロプログループの平均年齢の推移", 
+  labs(title = "ハロプログループの平均活動年数の推移", 
        subtitle = "{lubridate::year(closest_state)}年{lubridate::month(closest_state)}月", 
        caption = "データ:「https://github.com/xxgentaroxx/HP_DB」") # ラベル
 
@@ -346,7 +348,7 @@ g
 warnings()
 
 # gif画像を保存
-gganimate::anim_save(filename = "BarChartRace/output/AverageAge.gif", animation = g)
+gganimate::anim_save(filename = "BarChartRace/output/AverageExperience.gif", animation = g)
 
 
 # 動画を作成と保存
@@ -354,6 +356,6 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = n*(t+s), fps = (t+s)*mps, 
   width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = "BarChartRace/output/AverageAge.mp4")
+  renderer = gganimate::av_renderer(file = "BarChartRace/output/AverageExperience.mp4")
 )
 
