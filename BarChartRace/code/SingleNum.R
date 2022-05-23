@@ -35,9 +35,10 @@ single_df
 
 # 期間を指定
 date_from <- "1997-10-01"
-date_from <- "2014-01-01"
+date_from <- "2010-01-01"
 date_to   <- "2022-04-15"
-date_to   <- lubridate::today()
+date_to   <- lubridate::today() %>% 
+  as.character()
 
 # 値をまとめる
 date_vals <- c(date_from, date_to) %>% 

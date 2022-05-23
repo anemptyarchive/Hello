@@ -35,6 +35,7 @@ album_df
 
 # 期間を指定
 date_from <- "1998-01-01"
+date_from <- "2014-01-01"
 date_to   <- "2022-04-15"
 date_to   <- lubridate::today() %>% 
   as.character()
@@ -80,7 +81,7 @@ split_df
 release_n_df <- album_df %>% 
   dplyr::filter(!(artistName %in% pattern_vec)) %>% # 連名作品を削除
   dplyr::bind_rows(split_df) %>% # 分割した連名作品を追加
-  dplyr::filter(albumCategory %in% album_category) %>% # 指定した種類の作品を抽出
+  dplyr::filter(albumCategory %in% album_category) %>% # 指定したカテゴリを抽出
   dplyr::filter(releaseDate >= date_vals[1], releaseDate <= date_vals[2]) %>% # 指定した期間内の作品を抽出
   dplyr::arrange(releaseDate, albumID) %>% # IDの割り当て用に並べ替え
   dplyr::mutate(
@@ -97,10 +98,10 @@ release_n_df <- album_df %>%
     artist_idname = factor(artist_idname, levels = unique(artist_idname)), # レベル設定のため因子型に変換
     artist_id = dplyr::dense_rank(artist_idname) # アーティストIDを追加
   ) %>% # アーティスト名を編集
-  dplyr::count(release_date, artist_id, artist_name, name = "release_n") %>% # リリース数をカウント:(同じ月にIDが一緒で名前が異なる作品があるとたぶんバグる)
+  dplyr::count(release_date, artist_id, artist_name, name = "release_n") %>% # リリース数をカウント:(同じ月に同じIDで名前が異なる作品があるとたぶんバグる)
   dplyr::group_by(artist_id) %>% # 累積和の計算用にグループ化
   dplyr::mutate(release_n = cumsum(release_n)) %>% # リリース数の累積和を計算
-  dplyr::arrange(release_date, artist_id) %>% # 用に並べ替え
+  dplyr::arrange(release_date, artist_id) %>% # 複製数の追加用に並べ替え
   dplyr::group_by(artist_id) %>% # 複製数の追加用にグループ化
   dplyr::mutate(
     next_release_date = release_date %>% 
@@ -237,7 +238,7 @@ gganimate::anim_save(filename = "BarChartRace/output/AlbumNum.gif", animation = 
 # 動画を作成と保存
 m <- gganimate::animate(
   plot = anim, 
-  nframes = n*(t+s)+e, end_pause = e, fps = (t+s)*mps, 
+  nframes = n*(t+s), fps = (t+s)*mps, 
   width = 900, height = 800, 
   renderer = gganimate::av_renderer(file = "BarChartRace/output/AlbumNum.mp4")
 )
@@ -278,7 +279,7 @@ graph <- rank_df %>%
       "ハロプロアーティストのアルバムリリース数", 
       ":(", lubridate::year(date_from), "年", lubridate::month(date_from), "月以降)"
     ), 
-    subtitle = paste0(lubridate::year(date_val), "年", lubridate::month(date_val), "月時点"), # ラベル
+    subtitle = paste0(lubridate::year(date_val), "年", lubridate::month(date_val), "月時点"), 
     y = "リリース数", 
     caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
   ) # ラベル
