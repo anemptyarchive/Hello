@@ -215,11 +215,12 @@ anim <- ggplot(rank_df, aes(x = ranking, y = release_n, fill = artist_id, color 
   scale_x_reverse() + # x軸を反転
   gganimate::view_follow(fixed_x = TRUE) + # 表示範囲の調整
   labs(
-    title = paste0(
-      "ハロプロアーティストのアルバムリリース数の推移", 
-      ":(", lubridate::year(date_from), "年", lubridate::month(date_from), "月以降)"
+    title = "ハロプロアーティストのアルバムリリース数の推移", 
+    subtitle = paste0(
+      "カテゴリ：［", paste0(album_category, collapse = ", "), "］\n", 
+      lubridate::year(date_from), "年", lubridate::month(date_from), "月～", 
+      "{lubridate::year(closest_state)}年{lubridate::month(closest_state)}月"
     ), 
-    subtitle = "{lubridate::year(closest_state)}年{lubridate::month(closest_state)}月", 
     caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
   ) # ラベル
 
@@ -275,11 +276,12 @@ graph <- rank_df %>%
   coord_flip(clip = "off", expand = FALSE) + # 軸の入れ変え
   scale_x_reverse(breaks = 1:max(rank_df[["ranking"]])) + # x軸を反転
   labs(
-    title = paste0(
-      "ハロプロアーティストのアルバムリリース数", 
-      ":(", lubridate::year(date_from), "年", lubridate::month(date_from), "月以降)"
+    title = "ハロプロアーティストのアルバムリリース数", 
+    subtitle = paste0(
+      "カテゴリ：［", paste0(album_category, collapse = ", "), "］\n", 
+      lubridate::year(date_from), "年", lubridate::month(date_from), "月～", 
+      lubridate::year(date_val), "年", lubridate::month(date_val), "月"
     ), 
-    subtitle = paste0(lubridate::year(date_val), "年", lubridate::month(date_val), "月時点"), 
     y = "リリース数", 
     caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
   ) # ラベル
