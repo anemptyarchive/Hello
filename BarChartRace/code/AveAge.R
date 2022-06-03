@@ -168,8 +168,8 @@ rank_df <- tibble::tibble(
         gradDate = lubridate::floor_date(gradDate, unit = "mon")
       ), # 月単位に切り捨て
     by = c("groupID", "memberID")
-  ) %>% # 所属メンバー情報を結合
-  dplyr::filter(date >= joinDate, date < gradDate | is.na(gradDate)) %>% # 活動中のメンバーを抽出
+  ) %>% # 加入メンバー情報を結合
+  dplyr::filter(date >= joinDate, date < gradDate | is.na(gradDate)) %>% # グループ活動中のメンバーを抽出
   dplyr::select(!c(joinDate, gradDate)) %>% # 不要な列を削除
   dplyr::left_join(
     member_df %>% 
@@ -198,7 +198,7 @@ rank_df <- tibble::tibble(
     ranking = dplyr::row_number(-average_moonage), 
   ) %>% # ランク付けとラベル用の値を追加
   dplyr::ungroup() %>% # グループ化の解除
-  #dplyr::select(date, groupID, groupName, average_moonage, year, month, ranking) %>% # 利用する列を選択
+  dplyr::select(date, groupID, groupName, average_moonage, year, month, ranking) %>% # 利用する列を選択
   dplyr::arrange(date, ranking) # 昇順に並べ替え
 rank_df
 
@@ -226,7 +226,7 @@ n <- length(unique(rank_df[["date"]]))
 anim <- ggplot(rank_df, aes(x = ranking, y = average_moonage, fill = groupID, color = groupID)) + 
   geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 平均月齢バー
   geom_text(aes(y = 0, label = paste(groupName, " ")), hjust = 1) + # グループ名ラベル
-  geom_text(aes(label = paste(" ", year, "年", month, "か月")), hjust = 0) + # 平均年齢ラベル
+  geom_text(aes(label = paste(" ", year, "歳", month, "か月")), hjust = 0) + # 平均年齢ラベル
   gganimate::transition_states(states = date, transition_length = t, state_length = s, wrap = FALSE) + # フレーム
   gganimate::ease_aes("cubic-in-out") + # アニメーションの緩急
   gganimate::view_follow(fixed_x = TRUE) + # 表示範囲のフィット

@@ -123,7 +123,7 @@ date_vals
 
 ### アルバムカテゴリの設定
 
-　アルバムカテゴリを確認します。
+　アルバムのカテゴリを確認します。
 
 ```{r}
 # アルバムの種類を確認
@@ -225,10 +225,10 @@ release_n_df <- album_df %>%
     artist_idname = factor(artist_idname, levels = unique(artist_idname)), # レベル設定のため因子型に変換
     artist_id = dplyr::dense_rank(artist_idname) # アーティストIDを追加
   ) %>% # アーティスト名を編集
-  dplyr::count(release_date, artist_id, artist_name, name = "release_n") %>% # リリース数をカウント:(同じ月にIDが一緒で名前が異なる作品があるとたぶんバグる)
+  dplyr::count(release_date, artist_id, artist_name, name = "release_n") %>% # リリース数をカウント:(同じ月に同じIDで名前が異なる作品があるとたぶんバグる)
   dplyr::group_by(artist_id) %>% # 累積和の計算用にグループ化
   dplyr::mutate(release_n = cumsum(release_n)) %>% # リリース数の累積和を計算
-  dplyr::arrange(release_date, artist_id) %>% # 用に並べ替え
+  dplyr::arrange(release_date, artist_id) %>% # 複製数の追加用に並べ替え
   dplyr::group_by(artist_id) %>% # 複製数の追加用にグループ化
   dplyr::mutate(
     next_release_date = release_date %>% 
