@@ -1,5 +1,5 @@
 ---
-title: "ハロプログループの平均年齢の推移をバーチャートレースで可視化"
+title: "ハロプログループの最小・最大年齢の推移をバーチャートレースで可視化"
 author: "<a href='https://www.anarchive-beta.com/'>@anemptyarchive</a>"
 date: "`r format(Sys.time(), '%Y-%m-%d %H:%M:%S')`"
 output: 
@@ -20,16 +20,16 @@ knitr::opts_chunk$set(
 
 ・編集履歴
 
-- 2022/06/20：初稿
+- 2022/06/21：初稿
 
 ----
 
 \ 
 
 
-# 平均年齢の推移の可視化
+# 最小・最大年齢の推移の可視化
 
-　ハロー！プロジェクトのグループ・ユニットの平均年齢の推移をバーチャートレースで可視化します。\
+　ハロー！プロジェクトのグループ・ユニットの最小年齢または最大年齢の推移をバーチャートレースで可視化します。\
 \
 
 　次のパッケージを利用します。
@@ -49,7 +49,8 @@ library(magrittr)
 library(ggplot2)
 ```
 
-　この記事では、基本的に`パッケージ名::関数名()`の記法を使うので、パッケージを読み込む必要はありません。ただし、作図コードがごちゃごちゃしないようにパッケージ名を省略しているため、`ggplot2`は読み込む必要があります。また、基本的にベースパイプ(ネイティブパイプ)演算子`|>`を使いますが、パイプ演算子`%>%`ででないと処理できない部分があるため、`magrittr`も読み込む必要があります。\
+　この記事では、基本的に`パッケージ名::関数名()`の記法を使うので、パッケージを読み込む必要はありません。\
+　ただし、パイプ演算子`%>%`を使うため`magrittr`と、作図コードがごちゃごちゃしないようにパッケージ名を省略するため`ggplot2`は読み込む必要があります。\
 \
 
 
@@ -155,13 +156,13 @@ join_df
 　member.cscのメンバーID、group.csvのグループIDと対応しています。\
 \
 
-　このデータを利用して、各グループ・ユニットの平均年齢を集計します。\
+　このデータを利用して、各グループ・ユニットの最小・最大年齢を集計します。\
 \
 
 
 ## 期間の指定
 
-　アニメーションとしてグラフ化する(平均年齢を集計する)期間を指定します。
+　アニメーションとしてグラフ化する(最小・最大年齢を集計する)期間を指定します。
 
 ```{r}
 # 期間を指定
@@ -280,9 +281,7 @@ member_0_df <- group_df |>
   dplyr::filter(!is.na(date)) |> # 現在活動中のグループの解散月を除去
   tibble::add_column(
     groupName = " ", 
-    age_total = 0, 
-    member_n = 0, 
-    age_mean = 0
+    age = 0
   ) |> # メンバー数(0人)を追加
   dplyr::filter(date > min(date_vec), date < max(date_vec)) |> # 指定した期間内のデータを抽出
   dplyr::arrange(date, groupID) # 昇順に並び替え
@@ -305,9 +304,9 @@ member_0_df
 \
 
 
-## 平均年齢の集計と順位付け
+## 最小・最大年齢の集計と順位付け
 
-　平均年齢を集計してランキングを付けます。\
+　年齢の最小値または最大値を集計してランキングを付けます。\
 \
 
 　受け皿となるデータフレームの作成用にサイズを取得します。
@@ -321,10 +320,10 @@ member_size <- max(member_df[["memberID"]])
 　グループ数・メンバー数を取得します。\
 \
 
-　各月における「平均年齢」と「順位」のデータフレームを作成します。
+　各月における「最小年齢または最大年齢」と「順位」のデータフレームを作成します。
 
 ```{r}
-# 平均年齢を集計
+# 最小年齢or最大年齢を集計
 rank_df <- tidyr::expand_grid(
   date = date_vec, 
   groupID = 1:group_size, 
@@ -354,30 +353,27 @@ rank_df <- tidyr::expand_grid(
       lubridate::time_length(unit = "year") |> 
       floor()
   ) |> # メンバーの年齢を計算
-  dplyr::group_by(date, groupID, groupName) |> # 平均年齢の計算用にグループ化
-  dplyr::summarise(
-    age_total = sum(age, na.rm = TRUE), 
-    member_n = sum(!is.na(birthDate)), 
-    .groups = "drop"
-  ) |> # グループの合計年齢と(計算に使った)メンバー数を計算
-  dplyr::mutate(age_mean = age_total / member_n) |> # グループの平均年齢を計算
+  dplyr::group_by(date, groupID) |> # 最小・最大年齢の抽出用にグループ化
+  #dplyr::slice_min(age, n = 1, with_ties = FALSE) |> # グループの最小年齢を抽出
+  dplyr::slice_max(age, n = 1, with_ties = FALSE) |> # グループの最大年齢を抽出
+  dplyr::select(!c(memberID, memberName, birthDate)) |> # 不要な列を削除
   dplyr::bind_rows(member_0_df) |> # 結成前月・解散月を追加
-  dplyr::arrange(date, age_mean, groupID) |> # 順位付け用に並べ替え
+  dplyr::arrange(date, age, groupID) |> # 順位付け用に並べ替え
   dplyr::group_by(date) |> # 順位付け用にグループ化
   dplyr::mutate(
     groupID = factor(groupID), 
-    ranking = dplyr::row_number(-age_mean), 
+    ranking = dplyr::row_number(-age), 
   ) |> # 順位を追加
   dplyr::ungroup() |> # グループ化を解除
-  dplyr::select(date, groupID, groupName, age_mean, ranking) |> # 利用する列を選択
+  dplyr::select(date, groupID, groupName, age, ranking) |> # 利用する列を選択
   dplyr::arrange(date, ranking) # 昇順に並べ替え
 rank_df
 ```
 
 　まずは、データの受け皿となる、月・グループID・メンバーIDの全ての組み合わせを持つデータフレームを作成します。\
 　次に、各グループの(改名に対応した)名前と、各メンバーの加入・卒業日の情報を結合して、不要な行(組み合わせ)を削除します。\
-　続いて、各メンバーの誕生日の情報を結合して、各メンバーの年齢を計算し、各グループの平均年齢を計算します。\
-　最後に、各グループの平均年齢に応じて順位付けして、作図用にデータを編集します。\
+　続いて、各メンバーの誕生日の情報を結合して、各メンバーの年齢を計算し、各グループの年齢の最小値を`slice_min()`または最大値を`slice_max()`で取り出します。最小・最大年齢はコメントアウトで切り替えます。\
+　最後に、各グループの最小・最大年齢に応じて順位付けして、作図用にデータを編集します。\
 \
 
 　各処理を細かく見ます。
@@ -466,45 +462,41 @@ df4
 　`left_join()`で、`member_df`から誕生日(`birthDate`列)の情報を、メンバー(`memberID`列)で対応付けて結合します。メンバー名(`memberName`列)は確認用です。結合時に、`distinct()`で重複データを削除します。\
 　`interval()`と`time_length()`で、`birthDate`から`date`までの年数を求めます。`floor`で小数点以下を切り捨てると、各月におけるメンバーの年齢が得られます。\
 
-　各グループの平均年齢を計算します。
+　各グループの最小年齢または最大年齢を抽出します。
 
 ```{r}
-# 各グループの平均年齢を計算
+# 各グループの最小年齢または最大年齢を抽出
 df5 <- df4 %>% 
-  dplyr::group_by(date, groupID, groupName) |> # 平均年齢の計算用にグループ化
-  dplyr::summarise(
-    age_total = sum(age, na.rm = TRUE), 
-    member_n = sum(!is.na(birthDate)), 
-    .groups = "drop"
-  ) |> # グループの合計年齢と(計算に使った)メンバー数を計算
-  dplyr::mutate(age_mean = age_total / member_n) # グループの平均月齢を計算
+  dplyr::group_by(date, groupID) |> # 最小・最大年齢の抽出用にグループ化
+  #dplyr::slice_min(age, n = 1, with_ties = FALSE) # グループの最小年齢を抽出
+  dplyr::slice_max(age, n = 1, with_ties = FALSE) # グループの最大年齢を抽出
 df5
 ```
 
-　`summarise()`で、各メンバーの年齢を合計します。また、メンバー数をカウントします。ただし、誕生日情報がないメンバーがいるので、`is.na()`の結果を`!`で反転させて、欠損値`NA`でない(誕生日情報がある)メンバー数をカウントします。\
-　合計年齢(`age_total`列)をメンバー数(`member_n`列)で割って、平均年齢(`age_mean`列)とします。\
+　年齢(`age`列)の最小値を`slice_min()`または最大値を`slice_max()`で取り出します。必要に応じてコメントアウトで処理を切り替える必要があります。\
 
 　作図用に編集します。
 
 ```{r}
 # 作図用に編集
 df6 <- df5 %>% 
+  dplyr::select(!c(memberID, memberName, birthDate)) |> # 不要な列を削除
   dplyr::bind_rows(member_0_df) |> # 結成前月・解散月を追加
-  dplyr::arrange(date, age_mean, groupID) |> # 順位付け用に並べ替え
+  dplyr::arrange(date, age, groupID) |> # 順位付け用に並べ替え
   dplyr::group_by(date) |> # 順位付け用にグループ化
   dplyr::mutate(
     groupID = factor(groupID), 
-    ranking = dplyr::row_number(-age_mean), 
+    ranking = dplyr::row_number(-age), 
   ) |> # 順位を追加
   dplyr::ungroup() |> # グループ化を解除
-  #dplyr::select(date, groupID, groupName, age_mean, ranking) |> # 利用する列を選択
+  #dplyr::select(date, groupID, groupName, age, ranking) |> # 利用する列を選択
   dplyr::arrange(date, ranking) # 昇順に並べ替え
 df6
 ```
 
 　`bind_rows()`で「メンバーが0のデータ`member_0_df`」を結合します。\
 　色分け用にグループIDを因子型に変換します。\
-　`row_number()`で平均年齢に応じて順位を付けて、`ranking`列とします。昇順に通し番号が割り当てられるので、`-`を付けて大小関係を反転させます。\
+　`row_number()`で年齢に応じて順位を付けて、`ranking`列とします。昇順に通し番号が割り当てられるので、`-`を付けて大小関係を反転させます。\
 
 </details>
 
@@ -516,13 +508,13 @@ df6
 
 ## 推移の可視化
 
-　平均年齢と順位を棒グラフで可視化します。\
+　最小または最大年齢と順位を棒グラフで可視化します。\
 \
 
 
 ### バーチャートレースの作成
 
-　平均年齢の推移をバーチャートレースで可視化します。バーチャートレースの作図については別資料を参照してください。\
+　最小年齢または最大年齢の推移をバーチャートレースで可視化します。バーチャートレースの作図については別資料を参照してください。\
 \
 
 　フレームに関する値を指定します。
@@ -550,9 +542,9 @@ n
 
 ```{r}
 # バーチャートレースを作成
-anim <- ggplot(rank_df, aes(x = ranking, y = age_mean, fill = groupID, color = groupID)) + 
-  geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 平均年齢バー
-  geom_text(aes(label = paste(" ", round(age_mean, digits = 1), "歳")), hjust = 0) + # 平均年齢ラベル
+anim <- ggplot(rank_df, aes(x = ranking, y = age, fill = groupID, color = groupID)) + 
+  geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 年齢バー
+  geom_text(aes(label = paste(" ", age, "歳")), hjust = 0) + # 年齢ラベル
   geom_text(aes(y = 0, label = paste(groupName, " ")), hjust = 1) + # グループ名ラベル
   gganimate::transition_states(states = date, transition_length = t, state_length = s, wrap = FALSE) + # フレーム
   gganimate::ease_aes("cubic-in-out") + # アニメーションの緩急
@@ -574,11 +566,12 @@ anim <- ggplot(rank_df, aes(x = ranking, y = age_mean, fill = groupID, color = g
     #panel.background = element_blank(), # グラフ領域の背景
     plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
     plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
-    plot.margin = margin(t = 10, r = 60, b = 10, l = 120, unit = "pt"), # 全体の余白
+    plot.margin = margin(t = 10, r = 100, b = 10, l = 150, unit = "pt"), # 全体の余白
     legend.position = "none" # 凡例の表示位置
   ) + # 図の体裁
   labs(
-    title = "ハロプログループの平均年齢の推移", 
+    #title = "ハロプログループの最小年齢の推移", 
+    title = "ハロプログループの最大年齢の推移", 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
       "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)}月", 
@@ -608,7 +601,7 @@ g
 
 ```{r, eval=FALSE}
 # gif画像を保存
-gganimate::anim_save(filename = "output/YearsAge_Mean.gif", animation = g)
+gganimate::anim_save(filename = "output/YearsAge_MinMax.gif", animation = g)
 ```
 
 　`filename`引数にファイルパス(`"(保存する)フォルダ名/(作成する)ファイル名.gif"`)、`animation`引数に作成したgif画像を指定します。\
@@ -621,7 +614,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = n*(t+s), fps = (t+s)*mps, 
   width = 900, height = 800, 
-  renderer = gganimate::av_renderer(file = "output/YearsAge_Mean.mp4")
+  renderer = gganimate::av_renderer(file = "output/YearsAge_MinMax.mp4")
 )
 ```
 
@@ -632,7 +625,7 @@ m <- gganimate::animate(
 
 ### 月を指定して作図
 
-　最後に、指定した月における平均年齢のグラフを作成します。\
+　最後に、指定した月における最小年齢または最大年齢のグラフを作成します。\
 \
 
 　月を指定して、作図用のデータを作成します。
@@ -652,9 +645,9 @@ mon_rank_df <- rank_df |>
 
 ```{r}
 # 棒グラフを作成
-graph <- ggplot(mon_rank_df, aes(x = ranking, y = age_mean, fill = groupID, color = groupID)) + 
-  geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 平均年齢バー
-  geom_text(aes(y = 0, label = paste(" ", round(age_mean, digits = 1), "歳")), hjust = 0, color = "white") + # 平均年齢ラベル
+graph <- ggplot(mon_rank_df, aes(x = ranking, y = age, fill = groupID, color = groupID)) + 
+  geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 年齢バー
+  geom_text(aes(y = 0, label = paste(" ", age, "歳")), hjust = 0, color = "white") + # 年齢ラベル
   geom_text(aes(y = 0, label = paste(groupName, " ")), hjust = 1) + # グループ名ラベル
   coord_flip(clip = "off", expand = FALSE) + # 軸の入れ変え
   scale_x_reverse(breaks = 1:nrow(mon_rank_df)) + # x軸(縦軸)目盛を反転
@@ -673,7 +666,8 @@ graph <- ggplot(mon_rank_df, aes(x = ranking, y = age_mean, fill = groupID, colo
     legend.position = "none" # 凡例の表示位置
   ) + # 図の体裁
   labs(
-    title = "ハロプログループの平均年齢", 
+    #title = "ハロプログループの最小年齢", 
+    title = "ハロプログループの最大年齢", 
     subtitle = paste0(
       lubridate::year(date_val), "年", lubridate::month(date_val), "月1日時点"), 
     y = "年齢", 
@@ -682,21 +676,23 @@ graph <- ggplot(mon_rank_df, aes(x = ranking, y = age_mean, fill = groupID, colo
 graph
 ```
 
-\ 
+　最小年齢か最大年齢によって、タイトル(`labs()`の`title`引数の文字列)をコメントアウトで切り替えます。\
 
 　`ggsave()`で画像を保存できます。
 
 ```{r, eval=FALSE}
 # 画像を保存
 ggplot2::ggsave(
-  filename = paste0("output/YearsAge_Mean_", date_val, ".png"), plot = graph, 
+  filename = paste0("output/YearsAge_MinMax_", date_val, ".png"), plot = graph, 
   width = 24, height = 18, units = "cm", dpi = 100
 )
 ```
 
 \ 
 
-　以上で、平均年齢の推移を可視化できました。\
+　以上で、最小・最大年齢の推移を可視化できました。\
 \
+
+
 
 
