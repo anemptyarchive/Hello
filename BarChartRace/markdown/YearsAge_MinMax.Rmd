@@ -541,7 +541,7 @@ n
 　バーチャートレースを作成します。
 
 ```{r}
-# バーチャートレースを作成
+# バーチャートレースを作成:(y軸可変)
 anim <- ggplot(rank_df, aes(x = ranking, y = age, fill = groupID, color = groupID)) + 
   geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 年齢バー
   geom_text(aes(label = paste(" ", age, "歳")), hjust = 0) + # 年齢ラベル
@@ -692,7 +692,5 @@ ggplot2::ggsave(
 
 　以上で、最小・最大年齢の推移を可視化できました。\
 \
-
-
 
 

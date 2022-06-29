@@ -1,7 +1,7 @@
 ---
 title: "ハロプログループの平均年齢の推移をバーチャートレースで可視化"
-author: '<a href="https://www.anarchive-beta.com/">@anemptyarchive</a>'
-date: "2022/05/29"
+author: "<a href='https://www.anarchive-beta.com/'>@anemptyarchive</a>"
+date: "`r format(Sys.time(), '%Y-%m-%d %H:%M:%S')`"
 output: 
   html_document: 
     toc: true       # 目次
@@ -15,6 +15,17 @@ knitr::opts_chunk$set(
   message = FALSE, warning = FALSE
 )
 ```
+
+----
+
+・編集履歴
+
+- 2022/05/29：初稿
+
+----
+
+\ 
+
 
 # 平均年齢の推移の可視化
 

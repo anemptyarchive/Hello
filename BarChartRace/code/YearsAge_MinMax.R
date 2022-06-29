@@ -31,30 +31,30 @@ library(ggplot2)
 ### ・結成前月と解散月の追加:(バーの変化を強調したい) -----
 
 # 結成前月・解散月のデータを作成
-member_0_df <- group_df %>% 
-  dplyr::group_by(groupID) %>% # 日付の再設定用にグループ化
-  dplyr::mutate(dissolveDate = dplyr::lead(dissolveDate, n = max(dplyr::n())-1)) %>% # 最後の行を1行目にズラす
-  dplyr::slice_head(n = 1) %>% # 1行目を抽出
-  dplyr::ungroup() %>% # グループ化を解除
+member_0_df <- group_df |> 
+  dplyr::group_by(groupID) |> # 日付の再設定用にグループ化
+  dplyr::mutate(dissolveDate = dplyr::lead(dissolveDate, n = max(dplyr::n())-1)) |> # 最後の行を1行目にズラす
+  dplyr::slice_head(n = 1) |> # 1行目を抽出
+  dplyr::ungroup() |> # グループ化を解除
   dplyr::mutate(
-    formDate = formDate %>% 
-      lubridate::rollback() %>% # 結成1か月前に変更
+    formDate = formDate |> 
+      lubridate::rollback() |> # 結成1か月前に変更
       lubridate::floor_date(unit = "mon"), 
-    dissolveDate = dissolveDate %>% 
+    dissolveDate = dissolveDate |> 
       lubridate::floor_date(unit = "mon")
-  ) %>% # 月単位に切り捨て
+  ) |> # 月単位に切り捨て
   tidyr::pivot_longer(
     cols = c(formDate, dissolveDate), 
     names_to = "date_type", 
     values_to = "date"
-  ) %>% # 結成前月・解散月を同じ列に変形
-  dplyr::select(date, groupID) %>% # 利用する列を選択
-  dplyr::filter(!is.na(date)) %>% # 現在活動中のグループの解散月を除去
+  ) |> # 結成前月・解散月を同じ列に変形
+  dplyr::select(date, groupID) |> # 利用する列を選択
+  dplyr::filter(!is.na(date)) |> # 現在活動中のグループの解散月を除去
   tibble::add_column(
     groupName = " ", 
     age = 0
-  ) %>% # メンバー数(0人)を追加
-  dplyr::filter(date > min(date_vec), date < max(date_vec)) %>% # 指定した期間内のデータを抽出
+  ) |> # メンバー数(0人)を追加
+  dplyr::filter(date > min(date_vec), date < max(date_vec)) |> # 指定した期間内のデータを抽出
   dplyr::arrange(date, groupID) # 昇順に並び替え
 member_0_df
 
@@ -62,53 +62,52 @@ member_0_df
 # 集計と順位付け ----------------------------------------------------------------------
 
 # サイズを取得
-date_size   <- length(date_vec)
 group_size  <- max(group_df[["groupID"]])
 member_size <- max(member_df[["memberID"]])
 
-# 最小or最大年齢を集計
-rank_df <- tibble::tibble(
-  date = rep(date_vec, each = group_size*member_size), 
-  groupID = rep(rep(1:group_size, times = date_size), each = member_size), 
-  memberID = rep(1:member_size, times = date_size*group_size)
-) %>% # 全ての組み合わせを作成
-  dplyr::left_join(group_name_df, by = c("date", "groupID")) %>% # グループ情報を結合
-  dplyr::filter(date >= formDate, date <= dissolveDate) %>% # 活動中のグループを抽出
-  dplyr::select(!c(formDate, dissolveDate)) %>% # 不要な列を削除
+# 最小年齢or最大年齢を集計
+rank_df <- tidyr::expand_grid(
+  date = date_vec, 
+  groupID = 1:group_size, 
+  memberID = 1:member_size
+) |> # 全ての組み合わせを作成
+  dplyr::left_join(group_name_df, by = c("date", "groupID")) |> # グループ情報を結合
+  dplyr::filter(date >= formDate, date <= dissolveDate) |> # 活動中のグループを抽出
+  dplyr::select(!c(formDate, dissolveDate)) |> # 不要な列を削除
   dplyr::left_join(
-    join_df %>% 
+    join_df |> 
       dplyr::mutate(
         joinDate = lubridate::floor_date(joinDate, unit = "mon"), 
         gradDate = lubridate::floor_date(gradDate, unit = "mon")
       ), # 月単位に切り捨て
     by = c("groupID", "memberID")
-  ) %>% # 所属メンバー情報を結合
-  dplyr::filter(date >= joinDate, date < gradDate | is.na(gradDate)) %>% # 活動中のメンバーを抽出
-  dplyr::select(!c(joinDate, gradDate)) %>% # 不要な列を削除
+  ) |> # 所属メンバー情報を結合
+  dplyr::filter(date >= joinDate, date < gradDate | is.na(gradDate)) |> # 活動中のメンバーを抽出
+  dplyr::select(!c(joinDate, gradDate)) |> # 不要な列を削除
   dplyr::left_join(
-    member_df %>% 
+    member_df |> 
       dplyr::distinct(memberID, .keep_all = TRUE), # 重複を除去
     by = "memberID"
-  ) %>% # メンバー情報を結合
-  dplyr::select(date, groupID, groupName, memberID, memberName, birthDate) %>% # 利用する列を選択
+  ) |> # メンバー情報を結合
+  dplyr::select(date, groupID, groupName, memberID, memberName, birthDate) |> # 利用する列を選択
   dplyr::mutate(
-    age = lubridate::interval(start = birthDate, end = date) %>% 
-      lubridate::time_length(unit = "year") %>% 
+    age = lubridate::interval(start = birthDate, end = date) |> 
+      lubridate::time_length(unit = "year") |> 
       floor()
-  ) %>% # メンバーの年齢を計算
-  dplyr::group_by(date, groupID) %>% # 平均年齢の計算用にグループ化
-  #dplyr::slice_min(age, n = 1, with_ties = FALSE) %>% # グループの最小年齢を抽出
-  dplyr::slice_max(age, n = 1, with_ties = FALSE) %>% # グループの最大年齢を抽出
-  dplyr::select(!c(memberID, memberName, birthDate)) %>% # 不要な列を削除
-  dplyr::bind_rows(member_0_df) %>% # 結成前月・解散月を追加
-  dplyr::arrange(date, age, groupID) %>% # 順位付け用に並べ替え
-  dplyr::group_by(date) %>% # 順位付け用にグループ化
+  ) |> # メンバーの年齢を計算
+  dplyr::group_by(date, groupID) |> # 最小・最大年齢の抽出用にグループ化
+  dplyr::slice_min(age, n = 1, with_ties = FALSE) |> # グループの最小年齢を抽出
+  #dplyr::slice_max(age, n = 1, with_ties = FALSE) |> # グループの最大年齢を抽出
+  dplyr::select(!c(memberID, memberName, birthDate)) |> # 不要な列を削除
+  dplyr::bind_rows(member_0_df) |> # 結成前月・解散月を追加
+  dplyr::arrange(date, age, groupID) |> # 順位付け用に並べ替え
+  dplyr::group_by(date) |> # 順位付け用にグループ化
   dplyr::mutate(
     groupID = factor(groupID), 
     ranking = dplyr::row_number(-age), 
-  ) %>% # 順位を追加
-  dplyr::ungroup() %>% # グループ化を解除
-  dplyr::select(date, groupID, groupName, age, ranking) %>% # 利用する列を選択
+  ) |> # 順位を追加
+  dplyr::ungroup() |> # グループ化を解除
+  dplyr::select(date, groupID, groupName, age, ranking) |> # 利用する列を選択
   dplyr::arrange(date, ranking) # 昇順に並べ替え
 rank_df
 
@@ -161,8 +160,8 @@ anim <- ggplot(rank_df, aes(x = ranking, y = age, fill = groupID, color = groupI
     legend.position = "none" # 凡例の表示位置
   ) + # 図の体裁
   labs(
-    #title = "ハロプログループの最小年齢の推移", 
-    title = "ハロプログループの最大年齢の推移", 
+    title = "ハロプログループの最小年齢の推移", 
+    #title = "ハロプログループの最大年齢の推移", 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
       "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)}月", 
@@ -199,19 +198,19 @@ warnings()
 # 月を指定して作図 ----------------------------------------------------------------
 
 # 月(月初の日付)を指定
-date_val <- "2014-01-01"
+date_val <- "2022-06-01"
 
 # 作図用のデータを抽出
-tmp_rank_df <- rank_df %>% 
+mon_rank_df <- rank_df |> 
   dplyr::filter(date == lubridate::as_date(date_val))
 
 # 棒グラフを作成
-graph <- ggplot(tmp_rank_df, aes(x = ranking, y = age, fill = groupID, color = groupID)) + 
+graph <- ggplot(mon_rank_df, aes(x = ranking, y = age, fill = groupID, color = groupID)) + 
   geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 年齢バー
   geom_text(aes(y = 0, label = paste(" ", age, "歳")), hjust = 0, color = "white") + # 年齢ラベル
   geom_text(aes(y = 0, label = paste(groupName, " ")), hjust = 1) + # グループ名ラベル
   coord_flip(clip = "off", expand = FALSE) + # 軸の入れ変え
-  scale_x_reverse(breaks = 1:nrow(tmp_rank_df)) + # x軸(縦軸)目盛を反転
+  scale_x_reverse(breaks = 1:nrow(mon_rank_df)) + # x軸(縦軸)目盛を反転
   theme(
     axis.title.y = element_blank(), # y軸のラベル
     axis.text.y = element_blank(), # y軸の目盛ラベル
@@ -227,8 +226,8 @@ graph <- ggplot(tmp_rank_df, aes(x = ranking, y = age, fill = groupID, color = g
     legend.position = "none" # 凡例の表示位置
   ) + # 図の体裁
   labs(
-    #title = "ハロプログループの最小年齢", 
-    title = "ハロプログループの最大年齢", 
+    title = "ハロプログループの最小年齢", 
+    #title = "ハロプログループの最大年齢", 
     subtitle = paste0(
       lubridate::year(date_val), "年", lubridate::month(date_val), "月1日時点"), 
     y = "年齢", 
@@ -238,7 +237,7 @@ graph
 
 # 画像を保存
 ggplot2::ggsave(
-  filename = paste0("BarChartRace/output/YearsAge_MinMax_", date_val, ".png"), plot = graph, 
+  filename = paste0("BarChartRace/output/YearsAge_Min_", date_val, ".png"), plot = graph, 
   width = 24, height = 18, units = "cm", dpi = 100
 )
 
