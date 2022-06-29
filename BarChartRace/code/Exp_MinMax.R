@@ -1,5 +1,5 @@
 
-# グループごとの平均活動月数の推移を可視化 -------------------------------------------------------------------
+# グループごとの最小・最大活動月数の推移を可視化 -------------------------------------------------------------------
 
 # 利用パッケージ
 library(tidyverse)
@@ -52,9 +52,7 @@ member_0_df <- group_df |>
   dplyr::filter(!is.na(date)) |> # 現在活動中のグループの解散月を除去
   tibble::add_column(
     groupName = " ", 
-    exp_total = 0, 
-    member_n = 0, 
-    exp_mean = 0
+    exp = 0
   ) |> # メンバー数(0人)を追加
   dplyr::filter(date > min(date_vec), date < max(date_vec)) |> # 指定した期間内のデータを抽出
   dplyr::arrange(date, groupID) # 昇順に並び替え
@@ -66,7 +64,7 @@ member_0_df <- group_df |>
 group_size  <- max(group_df[["groupID"]])
 member_size <- max(member_df[["memberID"]])
 
-# 平均活動月数を集計
+# 最小活動月数or最大活動月数を集計
 rank_df <- tidyr::expand_grid(
   date = date_vec, 
   groupID = 1:group_size, 
@@ -82,7 +80,7 @@ rank_df <- tidyr::expand_grid(
         gradDate = lubridate::floor_date(gradDate, unit = "mon")
       ), # 月単位に切り捨て
     by = c("groupID", "memberID")
-  ) |> # 所属メンバー情報を結合
+  ) |> # 加入メンバー情報を結合
   dplyr::filter(date >= joinDate, date < gradDate | is.na(gradDate)) |> # 活動中のメンバーを抽出
   dplyr::select(!c(joinDate, gradDate)) |> # 不要な列を削除
   dplyr::left_join(
@@ -96,24 +94,21 @@ rank_df <- tidyr::expand_grid(
     exp = lubridate::interval(start = HPjoinDate, end = date) |> 
       lubridate::time_length(unit = "mon")
   ) |> # メンバーの活動月数を計算
-  dplyr::group_by(date, groupID, groupName) |> # 平均活動月数の計算用にグループ化
-  dplyr::summarise(
-    exp_total = sum(exp), 
-    member_n = dplyr::n(), 
-    .groups = "drop"
-  ) |> # グループの総活動月数とメンバー数を計算
-  dplyr::mutate(exp_mean = exp_total / member_n) |> # グループの平均活動月数を計算
+  dplyr::group_by(date, groupID) |> # 最小・最大活動月数の抽出用にグループ化
+  dplyr::slice_min(exp, n = 1, with_ties = FALSE) |> # グループの最小活動月数を抽出
+  #dplyr::slice_max(exp, n = 1, with_ties = FALSE) |> # グループの最大活動月数を抽出
+  dplyr::select(!c(memberID, memberName, HPjoinDate)) |> # 不要な列を削除
   dplyr::bind_rows(member_0_df) |> # 結成前月・解散月を追加
-  dplyr::arrange(date, exp_mean, groupID) |> # 順位付け用に並べ替え
+  dplyr::arrange(date, exp, groupID) |> # 順位付け用に並べ替え
   dplyr::group_by(date) |> # 順位付け用にグループ化
   dplyr::mutate(
     groupID = factor(groupID), 
-    year = exp_mean %/% 12, 
-    month = round(exp_mean %% 12, digits = 1), 
-    ranking = dplyr::row_number(-exp_mean), 
+    year = exp %/% 12, 
+    month = round(exp %% 12, digits = 1), 
+    ranking = dplyr::row_number(-exp), 
   ) |> # ラベル用の値と順位を追加
-  dplyr::ungroup() |> # グループ化を解除
-  dplyr::select(date, groupID, groupName, exp_mean, year, month, ranking) |> # 利用する列を選択
+  dplyr::ungroup() |> # グループ化の解除
+  dplyr::select(date, groupID, groupName, exp, year, month, ranking) |> # 利用する列を選択
   dplyr::arrange(date, ranking) # 昇順に並べ替え
 rank_df
 
@@ -138,9 +133,9 @@ n <- length(unique(rank_df[["date"]]))
 ### ・バーチャートレース -----
 
 # バーチャートレースを作成:(y軸可変)
-anim <- ggplot(rank_df, aes(x = ranking, y = exp_mean, fill = groupID, color = groupID)) + 
-  geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 平均活動月数バー
-  geom_text(aes(label = paste(" ", year, "年", month, "か月")), hjust = 0) + # 平均活動年数ラベル
+anim <- ggplot(rank_df, aes(x = ranking, y = exp, fill = groupID, color = groupID)) + 
+  geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 活動月数バー
+  geom_text(aes(label = paste(" ", year, "年", month, "か月")), hjust = 0) + # 活動年数ラベル
   geom_text(aes(y = 0, label = paste(groupName, " ")), hjust = 1) + # グループ名ラベル
   gganimate::transition_states(states = date, transition_length = t, state_length = s, wrap = FALSE) + # フレーム
   gganimate::ease_aes("cubic-in-out") + # アニメーションの緩急
@@ -166,7 +161,8 @@ anim <- ggplot(rank_df, aes(x = ranking, y = exp_mean, fill = groupID, color = g
     legend.position = "none" # 凡例の表示位置
   ) + # 図の体裁
   labs(
-    title = "ハロプログループの平均活動年数の推移", 
+    title = "ハロプログループの最小活動月数の推移", 
+    #title = "ハロプログループの最大活動月数の推移", 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
       "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)}月", 
@@ -185,7 +181,7 @@ g <- gganimate::animate(
 g
 
 # gif画像を保存
-gganimate::anim_save(filename = "BarChartRace/output/Exp_Mean.gif", animation = g)
+gganimate::anim_save(filename = "BarChartRace/output/Exp_MinMax.gif", animation = g)
 
 
 # 動画を作成と保存
@@ -193,7 +189,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = n*(t+s), fps = (t+s)*mps, 
   width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = "BarChartRace/output/Exp_Mean.mp4")
+  renderer = gganimate::av_renderer(file = "BarChartRace/output/Exp_MinMax.mp4")
 )
 
 
@@ -202,43 +198,44 @@ warnings()
 
 # 月を指定して作図 ----------------------------------------------------------------
 
-# 月を指定
-date_val <- "2021-05-01"
+# 月(月初の日付)を指定
+date_val <- "2022-06-01"
 
 # 作図用のデータを抽出
-tmp_rank_df <- rank_df |> 
-  dplyr::filter(date == lubridate::as_date(date_val))
+mon_rank_df <- rank_df |> 
+  dplyr::filter(date == lubridate::as_date(date_val)) |> # 指定した月のデータを抽出
+  dplyr::filter(groupName != " ") # 演出用のデータを除去
 
-# 平均活動年数の最大値を取得
-y_max <- max(tmp_rank_df[["average_moonage"]]) %/% 12
+# 活動年数の最大値を取得
+y_max <- max(mon_rank_df[["exp"]]) %/% 12
 y_max
 
 # 棒グラフを作成
-graph <- ggplot(tmp_rank_df, aes(x = ranking, y = average_moonage, fill = groupID, color = groupID)) + 
-  geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 平均活動月数バー
+graph <- ggplot(mon_rank_df, aes(x = ranking, y = exp, fill = groupID, color = groupID)) + 
+  geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 活動月数バー
+  geom_text(aes(y = 0, label = paste(" ", year, "年", month, "か月")), hjust = 0, color = "white") + # 活動年数ラベル
   geom_text(aes(y = 0, label = paste(groupName, " ")), hjust = 1) + # グループ名ラベル
-  geom_text(aes(y = 0, label = paste(" ", year, "年", month, "か月")), hjust = 0, color = "white") + # 平均活動年数ラベル
   coord_flip(clip = "off", expand = FALSE) + # 軸の入れ変え
-  scale_x_reverse(breaks = 1:nrow(tmp_rank_df)) + # x軸(縦軸)を反転
-  scale_y_continuous(breaks = 0:y_max*12, labels = 0:y_max) + # y軸(横軸)のラベル
+  scale_x_reverse(breaks = 1:nrow(mon_rank_df)) + # x軸(縦軸)を反転
+  scale_y_continuous(breaks = seq(0, y_max, 5)*12, labels = seq(0, y_max, 5)) + # y軸(横軸)目盛
   theme(
     axis.title.y = element_blank(), # y軸のラベル
     axis.text.y = element_blank(), # y軸の目盛ラベル
     axis.ticks.x = element_blank(), # x軸の目盛指示線
     #panel.grid.major.x = element_line(color = "grey", size = 0.1), # x軸の主目盛線
     panel.grid.major.y = element_blank(), # y軸の主目盛線
-    panel.grid.minor.x = element_blank(), # x軸の補助目盛線
     panel.grid.minor.y = element_blank(), # y軸の補助目盛線
     panel.border = element_blank(), # グラフ領域の枠線
     #panel.background = element_blank(), # グラフ領域の背景
     plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
     plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
-    plot.margin = margin(t = 10, r = 50, b = 10, l = 150, unit = "pt"), # 全体の余白
+    plot.margin = margin(t = 10, r = 20, b = 10, l = 120, unit = "pt"), # 全体の余白
     legend.position = "none" # 凡例の表示位置
   ) + # 図の体裁
   labs(
-    title = "ハロプログループの平均活動年数", 
-    subtitle = paste0(lubridate::year(date_val), "年", lubridate::month(date_val), "月時点"), 
+    title = "ハロプログループの最小活動月数", 
+    #title = "ハロプログループの最大活動月数", 
+    subtitle = paste0(lubridate::year(date_val), "年", lubridate::month(date_val), "月1日時点"), 
     y = "年数", 
     caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
   ) # ラベル
@@ -246,7 +243,7 @@ graph
 
 # 画像を保存
 ggplot2::ggsave(
-  filename = paste0("BarChartRace/output/Exp_Mean_", date_val, ".png"), plot = graph, 
+  filename = paste0("BarChartRace/output/Exp_MinMax_", date_val, ".png"), plot = graph, 
   width = 24, height = 18, units = "cm", dpi = 100
 )
 
