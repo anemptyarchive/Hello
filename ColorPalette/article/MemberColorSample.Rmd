@@ -1,0 +1,240 @@
+---
+title: "メンバーカラーの色見本の作成"
+author: "<a href='https://www.anarchive-beta.com/'>@anemptyarchive</a>"
+date: "`r format(Sys.time(), '%Y-%m-%d %H:%M:%S')`"
+output: 
+  html_document: 
+    toc: true       # 目次
+    toc_depth: 3    # 目次に含める見出しレベル
+    toc_float: true # 目次のスクロール追跡
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  message = FALSE, warning = FALSE
+)
+```
+
+----
+
+・編集履歴
+
+- 2022/07/13：初稿
+
+----
+
+\ 
+
+
+# 色見本の作成
+
+　ハロー！プロジェクトのグループのメンバーカラーの一覧を作成します。\
+\
+
+　利用するパッケージを読み込みます。
+
+```{r, eval=FALSE}
+# 利用パッケージ
+library(tidyverse)
+```
+
+```{r, echo=FALSE}
+### 資料作成用:(チェック)
+
+# チェック用
+library(ggplot2)
+```
+
+　この記事では、基本的に`パッケージ名::関数名()`の記法を使うので、パッケージを読み込む必要はありません。ただし、作図コードがごちゃごちゃしないようにパッケージ名を省略しているため、`ggplot2`は読み込む必要があります。\
+　`magrittr`パッケージのパイプ演算子`%>%`ではなく、ベースパイプ(ネイティブパイプ)演算子`|>`を使っています。`%>%`に置き換えても処理できます。\
+\
+
+
+## データの読込
+
+　メンバーカラーとカラーコードの対応データを読み込みます。\
+\
+
+　対応表は「[GitHubのリポジトリ](https://github.com/anemptyarchive/Hello/tree/main/ColorPalette/data)」に保存しています。現在活動中のグループの歴代メンバーのメンバーカラーに対応したカラーコードのcsvファイルです(過去のグループについても更新予定)。\
+　ダウンロードしてローカルフォルダに保存しておきます。\
+
+　保存先のフォルダパスを指定します。
+
+```{r}
+# 保存先のパスを指定
+dir_path <- "ColorPalette/data/"
+```
+
+　ファイルの読み込み時にファイル名を結合する(ファイルパスにする)ので、末尾を`/`にしておきます。\
+
+　各グループのメンバーとカラーコードの対応表を読み込みます。
+
+```{r}
+# UTF8のcsvファイルを読み込み
+all_df <- readr::read_csv(
+  file = paste0(dir_path, "membercolor_utf8.csv"), 
+  col_types = readr::cols(
+    group_id = "i", 
+    group_name = "c", 
+    member_id = "i", 
+    member_gen = "i", 
+    member_name = "c", 
+    color_code = "c"
+  )
+)
+all_df
+```
+
+　`read_csv()`でcsvファイルを読み込みます。Shift-JISのデータの場合は、`locale`引数に`locale(encoding = "CP932")`を指定します。ダウンロードしたファイルはUTF8です。\
+\
+
+　読み込んだデータを使って、色見本を作成します。\
+\
+
+
+## 色見本の作図
+
+　グループを指定して、そのグループのデータを取り出します。
+
+```{r}
+# グループを指定
+group_name_val <- "モーニング娘。"
+
+# 指定したグループを抽出
+color_df <- all_df |> 
+  dplyr::filter(group_name == group_name_val)
+color_df
+```
+
+　`group_name`列の要素が指定したグループである行を`filter()`で抽出します。\
+
+　取り出したデータを使って、棒グラフを作成します。
+
+```{r, fig.width=12, fig.height=10}
+# 色見本の作成:縦方向
+ggplot(color_df, aes(x = member_id, color = member_name, fill = member_name)) + 
+  geom_bar(mapping = aes(y = 1), stat = "identity") + # カラーバー
+  geom_text(mapping = aes(y = 0, label = paste(member_name, " ")), 
+            hjust = 1, angle = 90) + # メンバー名ラベル
+  geom_text(mapping = aes(y = 0, label = paste(" ", color_code)), 
+            hjust = 0, angle = 90, color = "black") + # カラーコードラベル
+  scale_color_manual(breaks = color_df[["member_name"]], values = color_df[["color_code"]]) + # 線の色
+  scale_fill_manual(breaks = color_df[["member_name"]], values = color_df[["color_code"]]) + # バーの色
+  scale_x_continuous(breaks = color_df[["member_id"]], expand = c(0, 0)) + # x軸目盛
+  scale_y_continuous(expand = c(0, 0)) + # y軸目盛
+  coord_cartesian(clip = "off") + 
+  theme(
+    axis.title.x = element_blank(), # 横軸のラベル
+    axis.title.y = element_blank(), # 縦軸のラベル
+    axis.text.x = element_blank(), # 横軸の目盛ラベル
+    axis.text.y = element_blank(), # 縦軸の目盛ラベル
+    axis.ticks.y = element_blank(), # 縦軸の目盛指示線
+    panel.grid.major.y = element_blank(), # 縦軸の主目盛線
+    panel.grid.minor.x = element_blank(), # 横軸の補助目盛線
+    panel.grid.minor.y = element_blank(), # 縦軸の補助目盛線
+    panel.border = element_blank(), # グラフ領域の枠線
+    panel.background = element_blank(), # グラフ領域の背景
+    plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
+    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
+    plot.background = element_rect(fill = "gray92"), # 全体の背景
+    plot.margin = margin(t = 10, r = 20, b = 90, l = 20, unit = "pt"), # 全体の余白
+    legend.position = "none" # 凡例の位置
+  ) + # 図の体裁
+  labs(
+    title = paste0(group_name_val, "のメンバーカラー一覧"), 
+    subtitle = paste0("総メンバー数：", max(color_df[["member_id"]]), "人")
+  ) # ラベル
+```
+
+　`scale_color_manual()`で線の色、`scale_fill_manual()`でバーの色を設定します。`aes()`の`color, fill`引数に指定した(列の)値を`breaks`引数に指定し、`values`引数に色名やカラーコードを指定します。\
+
+　続いて、横向きの棒グラフで色見本を作成します。
+
+```{r, fig.width=12, fig.height=12}
+# 色見本の作成:横方向
+ggplot(color_df, aes(x = member_id, color = member_name, fill = member_name)) + 
+  geom_bar(mapping = aes(y = 1), stat = "identity") + # カラーバー
+  geom_text(mapping = aes(y = 0, label = paste(member_name, " ")), 
+            hjust = 1) + # メンバー名ラベル
+  geom_text(mapping = aes(y = 0, label = paste(" ", color_code)), 
+            hjust = 0, color = "black") + # カラーコードラベル
+  scale_color_manual(breaks = color_df[["member_name"]], values = color_df[["color_code"]]) + # 線の色
+  scale_fill_manual(breaks = color_df[["member_name"]], values = color_df[["color_code"]]) + # バーの色
+  scale_x_reverse(breaks = color_df[["member_id"]], expand = c(0, 0)) + # x軸目盛
+  scale_y_continuous(expand = c(0, 0)) + # y軸目盛
+  coord_flip(clip = "off") + # 軸の入れ替え
+  theme(
+    axis.title.x = element_blank(), # 横軸のラベル
+    axis.title.y = element_blank(), # 縦軸のラベル
+    axis.text.x = element_blank(), # 横軸の目盛ラベル
+    axis.text.y = element_blank(), # 縦軸の目盛ラベル
+    axis.ticks.x = element_blank(), # 横軸の目盛指示線
+    panel.grid.major.x = element_blank(), # 横軸の主目盛線
+    panel.grid.minor.x = element_blank(), # 横軸の補助目盛線
+    panel.grid.minor.y = element_blank(), # 縦軸の補助目盛線
+    panel.border = element_blank(), # グラフ領域の枠線
+    panel.background = element_blank(), # グラフ領域の背景
+    plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
+    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
+    plot.background = element_rect(fill = "gray92"), # 全体の背景
+    plot.margin = margin(t = 10, r = 20, b = 10, l = 120, unit = "pt"), # 全体の余白
+    legend.position = "none" # 凡例の位置
+  ) + # 図の体裁
+  labs(
+    title = paste0(group_name_val, "のメンバーカラー一覧"), 
+    subtitle = paste0("総メンバー数：", max(color_df[["member_id"]]), "人")
+  ) # ラベル
+```
+
+　`coord_flip()`でx軸とy軸を入れ替えることで、横方向に伸びる棒グラフになります。\
+\
+
+
+## 利用例
+
+　カラーコードの対応表の利用例として「活動期間のタイムラインチャート」を参照してください。カラーパレットとしての利用例の試作です。\
+\
+
+　利用するメンバーカラー(カラーコード)を取り出します。
+
+```{r}
+# カラーパレットを作成
+color_vec <- color_df |> 
+  dplyr::filter(member_gen == 10) |> # 期を指定
+  dplyr::pull(color_code) |> # ベクトルとして取得
+  (\(x){x[c(2, 3, 1, 4)]})() # 色順を並べ替え
+color_vec
+```
+
+　この例では、モーニング娘。の10期メンバーの色を抽出して、ラムダ関数`\()`の記法で順番を入れ替えます。\
+
+　2乗和を計算して、最大値で割ります。
+
+```{r}
+# 値を作成
+res_df <- tidyr::expand_grid(x = 1:100, y = 1:100) |> # 2次元の点を作成
+  dplyr::mutate(z = x^2 + y^2, z = z / max(z)) # 2乗和を最大値で割る
+res_df
+```
+
+　`expand_grid()`で格子状の点を作成します。\
+　`mutate()`パッケージを使って、2乗和の計算結果列を作成します。\
+
+　2乗和のヒートマップを作成します。
+
+```{r}
+# ヒートマップを作成
+ggplot(res_df, aes(x = x, y = y, color = z, fill = z)) + 
+  geom_tile() + # ヒートマップ
+  scale_color_gradientn(colours = color_vec) + # グラデーション
+  scale_fill_gradientn(colours = color_vec) + # タイルの色
+  coord_fixed(ratio = 1) # アスペクト比
+```
+
+　`geom_tile()`でヒートマップを作成できます。\
+　`scale_color_gradientn()`や`scale_color_gradientn()`でグラデーションに使う色を指定します。\
+　(綺麗なグラデーションにするには色の順序を調整する必要があるため、自動で処理できません。カラーコードのソートができるといいのですが。)\
+\
+
+
