@@ -146,7 +146,7 @@ release_n_df <- single_df %>%
       stringr::str_replace(pattern = "T&Cボンバー", replacement = "太陽とシスコムーン") %>% # 改名前に統一
       stringr::str_replace(pattern = "カントリー娘。.*", replacement = "カントリー娘。") %>% # ゲスト名を削除
       stringr::str_replace(pattern = "ミニハムず", replacement = "ミニモニ。") %>% # 企画名義を元の名前に変更
-      stringr::str_replace(pattern = "S/mileage", replacement = "スマイレージ") %>%  # 改名後に統一
+      stringr::str_replace(pattern = "S/mileage", replacement = "スマイレージ") %>% # 改名後に統一
       stringr::str_replace(pattern = "アンジュルム", replacement = "スマイレージ") %>% # 改名前に統一
       stringr::str_replace(pattern = "ハロプロ研修生北海道 feat.稲場愛香", replacement = "ハロプロ研修生北海道"), # ゲスト名を削除
     artist_idname = factor(artist_idname, levels = unique(artist_idname)), # レベル設定のため因子型に変換
