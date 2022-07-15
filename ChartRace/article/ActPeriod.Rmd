@@ -1,0 +1,992 @@
+---
+title: "ハロプログループの歴代メンバーの活動期間をタイムラインチャートで可視化"
+author: "<a href='https://www.anarchive-beta.com/'>@anemptyarchive</a>"
+date: "`r format(Sys.time(), '%Y-%m-%d %H:%M:%S')`"
+output: 
+  html_document: 
+    toc: true       # 目次
+    toc_depth: 3    # 目次に含める見出しレベル
+    toc_float: true # 目次のスクロール追跡
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  message = FALSE, warning = FALSE
+)
+```
+
+----
+
+・編集履歴
+
+- 2022/07/15：初稿
+
+----
+
+\ 
+
+
+# メンバーの活動期間の可視化
+
+　ハロー！プロジェクトのグループの歴代メンバーの活動期間をタイムラインチャートで可視化します。\
+\
+
+　次のパッケージを利用します。
+
+```{r, eval=FALSE}
+# 利用パッケージ
+library(tidyverse)
+library(lubridate)
+library(gganimate)
+```
+
+```{r, echo=FALSE}
+### 資料作成用:(チェック用)
+
+# チェック用
+library(magrittr)
+library(ggplot2)
+```
+
+　この記事では、基本的に`パッケージ名::関数名()`の記法を使うので、パッケージを読み込む必要はありません。ただし、作図コードがごちゃごちゃしないようにパッケージ名を省略しているため、`ggplot2`は読み込む必要があります。\
+　`magrittr`パッケージのパイプ演算子`%>%`ではなく、ベースパイプ(ネイティブパイプ)演算子`|>`を使っています。`%>%`に置き換えても処理できます。\
+\
+
+```{r, echo=FALSE}
+### 資料作成用:(データの読込)
+
+### ・モーニング娘。 -----
+morning_df <- tibble::tibble(
+  member_name = c(
+    "福田明日香", "石黒彩", "中澤裕子", "安倍なつみ", "飯田圭織", 
+    "市井紗耶香", "保田圭", "矢口真里", 
+    "後藤真希", 
+    "辻希美", "加護亜依", "石川梨華", "吉澤ひとみ", 
+    "紺野あさ美", "小川麻琴", "高橋愛", "新垣里沙", 
+    "藤本美貴", "亀井絵里", "田中れいな", "道重さゆみ", 
+    "久住小春", 
+    "光井愛佳", "ジュンジュン", "リンリン", 
+    "譜久村聖", "生田衣梨奈", "鞘師里保", "鈴木香音", 
+    "飯窪春菜", "石田亜佑美", "佐藤優樹", "工藤遥", 
+    "小田さくら", 
+    "尾形春水", "野中美希", "牧野真莉愛", "羽賀朱音", 
+    "加賀楓", "横山玲奈", 
+    "森戸知沙希", 
+    "北川莉央", "岡村ほまれ", "山﨑愛生", 
+    "櫻井梨央"
+  ), 
+  color_code = c(
+    NA, NA, "#006400", "#FF0000", "#000080", 
+    "#87CEEB", "#FFB6C1", "#9370DB", 
+    "#FFA500", 
+    NA, NA, "#FF1493", "#800080", 
+    "#FFB6C1", "#0000FF", "#FFFF00", "#ADFF2F", 
+    "#FF0000", "#FFA500", "#00BFFF", "#FFB6C1", 
+    "#FF0000", 
+    "#985BA1", "#0000FF", "#00B379", 
+    "#E5007F", "#ADFF2F", "#FF0000", "#008000", 
+    "#FFF33F", "#0233CB", "#00A59E", "#FFA500", 
+    "#985BA1", 
+    "#56BED9", "#572A7B", "#FFC0CB", "#FFA500", 
+    "#DB092C", "#EDAE3C", 
+    "#FFFFFF", 
+    "#56BED9", "#FFDD00", "#02A23E", 
+    "#E8D3CA"
+  )
+)
+color_df <- morning_df
+```
+
+
+## データの読込
+
+　「[HP_DB](https://github.com/xxgentaroxx/HP_DB)」のデータを利用します。GitHub上のcsvデータをRから読み込めたらよかったのですがやり方が分からなかったので、ダウンロードしてローカルフォルダに保存しておきます。\
+
+　保存先のフォルダパスを指定します。
+
+```{r, eval=FALSE}
+# フォルダパスを指定
+dir_path <- "data/HP_DB-main/"
+```
+
+```{r, echo=FALSE}
+### 資料作成用:(実際の設定)
+
+# フォルダパスを指定
+dir_path <- "BarChartRace/data/HP_DB-main/"
+```
+
+　ファイルの読み込み時にファイル名を結合する(ファイルパスにする)ので、末尾を`/`にしておきます。\
+
+　グループの情報を読み込みます。
+
+```{r}
+# グループ一覧を読み込み
+group_df <- readr::read_csv(
+  file = paste0(dir_path, "group.csv"), 
+  col_types = readr::cols(
+    groupID = "i", 
+    groupName = "c", 
+    formDate = readr::col_date(format = "%Y/%m/%d"), 
+    dissolveDate = readr::col_date(format = "%Y/%m/%d"), 
+    isUnit = "l"
+  )
+) |> 
+  dplyr::arrange(groupID, formDate) # 昇順に並べ替え
+group_df
+```
+
+　group.csvは、グループID・グループ名・結成日・解散日・ユニットかどうかの5列のcsvファイルです。改名グループであれば結成日・解散日は改名日を表し、現在活動中であれば解散日が欠損値になります。\
+　例えば、「モーニング娘。とモーニング娘。'14」「スマイレージとアンジュルム」「カントリー娘。とカントリー・ガールズ」は同一のグループとして共通のグループIDを持ちます。よって、`groupID`列の値は重複し、`groupName`列の値(文字列)は重複しません。\
+
+　メンバーの情報を読み込みます。
+
+```{r}
+# メンバー一覧を読み込み
+member_df <- readr::read_csv(
+  file = paste0(dir_path, "member.csv"), 
+  col_types = readr::cols(
+    memberID = "i", 
+    memberName = "c", 
+    HPjoinDate = readr::col_date(format = "%Y/%m/%d"), 
+    debutDate = readr::col_date(format = "%Y/%m/%d"), 
+    HPgradDate = readr::col_date(format = "%Y/%m/%d"), 
+    memberKana = "c", 
+    birthDate = readr::col_date(format = "%Y/%m/%d")
+  )
+) |> 
+  dplyr::arrange(memberID) # 昇順に並べ替え
+member_df
+```
+
+　member.csvは、メンバーID・メンバー名・ハロプロ加入日・メジャーデビュー日・卒業日・メンバー名(かな)の6列のcsvファイルです。\
+　member.csvには、メンバーが重複しているデータがあります。
+
+```{r}
+# 重複データを確認
+member_df |> 
+  dplyr::group_by(memberID) |> # 重複のカウント用にグループ化
+  dplyr::mutate(n = dplyr::n()) |> # 重複をカウント
+  dplyr::ungroup() |> # グループ化を解除
+  dplyr::filter(n > 1) # 重複データを抽出
+```
+
+　「りんね」さんと「岡田ロビン翔子」は改名によるもので、「紺野あさ美」さんはモーニング娘。を卒業した後にハロプロに復帰したためです。\
+　また、誕生日が欠損しているデータがあります。
+
+```{r}
+# 欠損データを確認
+member_df |> 
+  dplyr::filter(is.na(birthDate))
+```
+
+　誕生日が公表されていないようです。\
+
+　メンバーの加入日・卒業日の情報を読み込みます。
+
+```{r}
+# 加入・卒業日一覧を読み込み
+join_df <- readr::read_csv(
+  file = paste0(dir_path, "join.csv"), 
+  col_types = readr::cols(
+    memberID = "i", 
+    groupID = "i", 
+    joinDate = readr::col_date(format = "%Y/%m/%d"), 
+    gradDate = readr::col_date(format = "%Y/%m/%d")
+  )
+) |> 
+  dplyr::arrange(joinDate, memberID, groupID) # 昇順に並べ替え
+join_df
+```
+
+　join.csvは、メンバーID・グループID・加入日・卒業日の4列のcsvファイルです。現在活動中であれば卒業日が欠損値になります。\
+　member.cscのメンバーID、group.csvのグループIDと対応しています。\
+\
+
+　このデータを利用して、各メンバーの活動期間を集計します。\
+\
+
+
+## データの編集
+
+　カントリー娘。とカントリー・ガールズは同じIDが割り当てられています。そのため以降の処理では、同じグループとして処理されます。\
+　別のグループとして扱う場合は、新たなグループIDを割り当てます。
+
+```{r}
+# 分割するグループ名を指定
+group_name <- "カントリー・ガールズ"
+
+# グループを分割
+group_df <- group_df |> 
+  dplyr::mutate(
+    groupID = dplyr::if_else(
+      groupName == group_name, true = max(groupID) + 1L, false = groupID
+    ) # 指定したグループのIDを再設定
+  )
+
+# 分割したグループを確認
+group_df |> 
+  dplyr::filter(groupID == max(groupID))
+```
+
+　`if_else()`を使って、指定したグループのIDをグループIDの最大値に1を加えた値に変更します。数値型ではなく整数型のため、`1`ではなく`1L`を加えます。\
+\
+
+
+## タイムラインによる可視化
+
+　メンバーごとのタイムラインチャートを作成します。\
+\
+
+
+### 活動期間の集計：(加入日・卒業日)
+
+　グループを指定して、そのグループの歴代メンバーの加入日と卒業日における年齢と活動日数を計算します。
+
+```{r}
+# グループを指定
+groupID_val <- 1
+
+# メンバーごとに加入日と卒業日における年齢と活動日数を計算
+chart_df <- join_df |> 
+  # メンバー情報を追加
+  dplyr::filter(groupID == groupID_val) |> # 指定したグループを抽出
+  dplyr::arrange(joinDate, memberID) |> # メンバーIDの再設定用に並べ替え
+  dplyr::mutate(
+    member_id = dplyr::row_number(), # メンバーIDを再設定
+    gradDate = dplyr::if_else(
+      is.na(gradDate), true = lubridate::today(), false = gradDate
+    ), # 現在活動中であれば現在の日付を設定
+    joinDate2 = joinDate, # 加入日を複製
+  ) |> # 加入・卒業情報を編集
+  dplyr::left_join(
+    member_df |> 
+      dplyr::select(memberID, memberName, birthDate) |> # 利用する列を選択
+      dplyr::group_by(memberID) |> # 重複の除去用にグループ化
+      dplyr::slice_tail(n = 1) |> # 重複を除去:(slice_headなら改名前、slice_tailなら改名後を抽出)
+      dplyr::ungroup(), # グループ化を解除
+    by = "memberID"
+  ) |> # メンバー情報を結合
+  tidyr::pivot_longer(
+    cols = c(joinDate, gradDate), 
+    names_to = "date_type", 
+    values_to = "date"
+  ) |> # 加入日・卒業日の列をまとめる
+  dplyr::select(date, date_type, member_id, memberName, birthDate, joinDate = joinDate2) |> # 利用するを選択
+  dplyr::arrange(date, member_id) |> # 昇順に並べ替え
+  # メンバー情報を編集
+  dplyr::mutate(
+    age = lubridate::interval(start = birthDate, end = date) |> 
+      lubridate::time_length(unit = "year") |> 
+      floor(), # 年齢を計算
+    act_y = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "year") |> 
+      floor(), # 活動年数を計算
+    act_m = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "mon") |> 
+      floor() %% 12, # 活動月数-年数を計算
+    act_d = dplyr::case_when(
+      lubridate::day(date) == lubridate::day(joinDate) ~ 0, # 日にちが同じなら、0
+      lubridate::day(date) > lubridate::day(joinDate) ~ lubridate::day(date) - lubridate::day(joinDate) |> 
+        as.numeric(), # 加入時の日にちが大きいなら、日にちの差
+      and(
+        lubridate::day(date) < lubridate::day(joinDate), 
+        lubridate::day(lubridate::rollback(date)) < lubridate::day(joinDate)
+      ) ~ lubridate::interval(
+        start = date |> 
+          lubridate::rollback(), # 前月の末日に変更
+        end = date
+      ) |> 
+        lubridate::time_length(unit = "day"), # 卒業時の日にちが大きく前月に加入時の日にちが存在しない月なら、前月の末日との差
+      lubridate::day(date) < lubridate::day(joinDate) ~ lubridate::interval(
+        start = date |> 
+          lubridate::rollback() |> # 1か月前の末日に変更
+          lubridate::floor_date(unit = "mon") + lubridate::day(joinDate) - 1, # 加入時と同じ日にちに変更
+        end = date
+      ) |> 
+        lubridate::time_length(unit = "day") # 卒業時の日にちが大きいなら、前月の加入時と同じ日にちとの差
+    ), # 活動日数-年月数を計算
+    act_days = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "day"), # 活動日数を計算
+    label = paste0(age, "歳：", act_y, "年", act_m, "か月", act_d, "日")
+  ) |> # ラベル用の値を計算
+  dplyr::select(date, member_id, memberName, age, act_y, act_m, act_d, label) # 利用する列を選択
+chart_df
+```
+
+　グループを指定して、指定したグループの歴代メンバーのID・加入日・卒業日の列を取り出します。\
+　各メンバーの名前と誕生日を結合します。\
+　加入日と卒業日の列をまとめて日付列とします。それぞれ、タイムラインの始点と終点になります。\
+　メンバーラベルとして利用するために、加入時・卒業時における年齢と活動年数を計算します。\
+\
+
+　各処理を細かく見ます。
+
+<details><summary>・コード(クリックで展開)</summary>
+
+　指定したグループの歴代メンバーの情報を作成します。
+
+```{r}
+# メンバー情報を作成
+df1 <- join_df |> 
+  dplyr::filter(groupID == groupID_val) |> # 指定したグループを抽出
+  dplyr::arrange(joinDate, memberID) |> # メンバーIDの再設定用に並べ替え
+  dplyr::mutate(
+    member_id = dplyr::row_number(), # メンバーIDを再設定
+    gradDate = dplyr::if_else(
+      is.na(gradDate), true = lubridate::today(), false = gradDate
+    ), # 現在活動中であれば現在の日付を設定
+    joinDate2 = joinDate, # 加入日を複製
+  ) |> # 加入・卒業情報を編集
+  dplyr::left_join(
+    member_df |> 
+      dplyr::select(memberID, memberName, birthDate) |> # 利用する列を選択
+      dplyr::group_by(memberID) |> # 重複の除去用にグループ化
+      dplyr::slice_tail(n = 1) |> # 重複を除去:(slice_headなら改名前、slice_tailなら改名後を抽出)
+      dplyr::ungroup(), # グループ化を解除
+    by = "memberID"
+  ) # メンバー情報を結合
+df1
+```
+
+　`join_df`から、指定したグループのメンバーのID・加入日・卒業日の列を取り出して、データフレームを加工します。\
+　加入順に並べ替えて、新たなメンバーIDを`row_number()`で割り当てます。加入順が同じ場合は、元のメンバーID順にします。\
+　現在活動中のメンバーであれば卒業日(`gradDate`列)が`NA`なので、`if_else()`と`is.na()`を使って、`today()`で現在の日付に変更します。\
+　加入日の列を複製しておきます。\
+
+　メンバーIDで対応付けて、`member_df`のメンバー名・誕生日の列を`left_join()`で結合します。重複するメンバーが存在するため、`slice_head()`または`slice_tail()`で改名前または改名後のデータ(行)を抽出しておきます。改名していない(重複しない)場合は、上からでも下からでも1行なので、影響しません。\
+\
+
+　加入日と卒業日の列をまとめて日付列を作成します。
+
+```{r}
+# 利用する列を加工
+df2 <- df1 |> 
+  tidyr::pivot_longer(
+    cols = c(joinDate, gradDate), 
+    names_to = "date_type", 
+    values_to = "date"
+  ) |> # 加入日・卒業日の列をまとめる
+  dplyr::select(date, date_type, member_id, memberName, birthDate, joinDate = joinDate2) |> # 利用するを選択
+  dplyr::arrange(date, member_id) # 昇順に並べ替え
+df2
+```
+
+　`pivot_longer()`で`joinDate`列と`gradDate`列をまとめます。\
+　加入日列が1つになったので、複製した`joinDate2`列を元の名前に戻します。\
+
+　加入日と卒業日における年齢と活動日数(y年mか月d日のy・m・dの値)を計算します。
+
+```{r}
+# メンバー情報を編集
+df3 <- df2 |> 
+  dplyr::mutate(
+    age = lubridate::interval(start = birthDate, end = date) |> 
+      lubridate::time_length(unit = "year") |> 
+      floor(), # 年齢を計算
+    act_y = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "year") |> 
+      floor(), # 活動年数を計算
+    act_m = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "mon") |> 
+      floor() %% 12, # 活動月数-年数を計算
+    act_d = dplyr::case_when(
+      lubridate::day(date) == lubridate::day(joinDate) ~ 0, # 日にちが同じなら、0
+      lubridate::day(date) > lubridate::day(joinDate) ~ lubridate::day(date) - lubridate::day(joinDate) |> 
+        as.numeric(), # 加入時の日にちが大きいなら、日にちの差
+      and(
+        lubridate::day(date) < lubridate::day(joinDate), 
+        lubridate::day(lubridate::rollback(date)) < lubridate::day(joinDate)
+      ) ~ lubridate::interval(
+        start = date |> 
+          lubridate::rollback(), # 前月の末日に変更
+        end = date
+      ) |> 
+        lubridate::time_length(unit = "day"), # 卒業時の日にちが大きく前月に加入時の日にちが存在しない月なら、前月の末日との差
+      lubridate::day(date) < lubridate::day(joinDate) ~ lubridate::interval(
+        start = date |> 
+          lubridate::rollback() |> # 1か月前の末日に変更
+          lubridate::floor_date(unit = "mon") + lubridate::day(joinDate) - 1, # 加入時と同じ日にちに変更
+        end = date
+      ) |> 
+        lubridate::time_length(unit = "day") # 卒業時の日にちが大きいなら、前月の加入時と同じ日にちとの差
+    ), # 活動日数-年月数を計算
+    act_days = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "day"), # 活動日数を計算
+    label = paste0(age, "歳：", act_y, "年", act_m, "か月", act_d, "日")
+  ) #|> # ラベル用の値を計算
+  #dplyr::select(date, member_id, memberName, age, act_y, act_m, act_d, label) # 利用する列を選択
+df3
+```
+
+　`interval()`と`time_length()`の`unit`引数に`"year"`を指定して、`birthDate`から`date`までの年数を求めます。`floor()`で小数点以下を切り捨てると、各月におけるメンバーの年齢が得られます。\
+　同様に、`joinDate`から`date`までの年数で活動年数が得られます。\
+　`unit`引数に`"mon"`を指定すると月数を返します。`%%`演算子を使って`12`で割った余りを計算すると、y年mか月のmの値が得られます。\
+
+　y年mか月d日のdの値については、「日付列`date`の日にち」と「加入時`joinDate`の日にち」の大小関係により、`case_when()`で条件分岐して処理します。\
+　`date`と`joinDate`の日にちが同じであれば、0日です。これは日付列が加入日のときの処理で、以降は卒業日のときの処理です。\
+　`date`の日にちが大きければ、`joinDate`から`date`までの日数を計算します。\
+　`joinDate`の日にちが大きければ、`date`を、`rollback()`と`floor_date()`で1か月前の初日にし、さらに加入時の日にち-1を加え、前月の加入時の日にちにして`date`までの日数を計算します。\
+　ただし、前月に加入時の日にちがない場合、例えば加入日が30日で`date`が3月のときは前月の加入時の日にちではなく3月2日になってしまいます。そこで、`date`を`rollback()`で前月の末日にして、`date`までの日数を計算します。`and()`を使って、前月に加入時の日がない(前月の末日が加入時の日より小さい)条件も満たす場合に処理します。\
+
+　総活動日数も計算していますが、この値は使いません。\
+　また確認用として、年齢・活動年数ラベルとして表示するための文字列を作成します。活動年数をyyyy年m月dd日の形式にするために、日にちが1桁の場合は`str_pad()`で2桁目を`0`で埋めます。\
+
+</details>
+
+\ 
+
+　以上で、必要なデータを得られました。次は、作図を行います。\
+\
+
+
+### タイムラインの作図
+
+　タイトル用に、グループ名を設定します。
+
+```{r}
+# グループ名を設定
+group_name <- group_df |> 
+  dplyr::filter(groupID == groupID_val) |> # 指定したグループを抽出
+  dplyr::pull(groupName) |> # ベクトルとして取得
+  unique() |> # 重複を削除
+  (\(x){x[1]})() # x[n]でn番目の要素を抽出
+#group_name <- "モーニング娘。"
+group_name
+```
+
+　半自動で処理するためにラムダ関数`\()`を使っていますが、普通に文字列で指定する方が簡単だと思います。\
+
+　x軸の値を作成します。
+
+```{r}
+# x軸の値(年)を作成
+date_vec <- seq(
+  from = chart_df[["date"]] |> 
+    min() |> # 最小値を取得
+    lubridate::floor_date(unit = "year"), # 年単位で切り捨て
+  to = chart_df[["date"]] |> 
+    max() |> # 最大値を取得
+    lubridate::ceiling_date(unit = "year"), # 年単位で切り上げ
+  by = "year"
+)
+head(date_vec)
+```
+
+　グループの活動期間(`date`列)の最小値の年から最大値の年までの値を作成します。\
+
+　加入時用のラベルを作成します。
+
+```{r}
+# 加入時ラベルを作成
+label_join_df <- chart_df |> 
+  dplyr::group_by(member_id) |> # データ抽出用にグループ化
+  dplyr::filter(date == min(date)) |> # 加入時のデータを抽出
+  dplyr::ungroup() |> # グループ化を解除
+  dplyr::mutate(label = paste0(memberName, " (", age, "歳) ")) # 年齢ラベルを作成
+label_join_df
+```
+
+　メンバー名と加入時の年齢を文字列結合します。各メンバーの加入時のデータは`date`の最小値です。\
+
+　卒業時用のラベルを作成します。
+
+```{r}
+# 卒業時ラベルを作成
+label_grad_df <- chart_df |> 
+  dplyr::group_by(member_id) |> # データ抽出用にグループ化
+  dplyr::filter(date == max(date)) |> # 卒業時のデータを抽出
+  dplyr::ungroup() |> # グループ化を解除
+  dplyr::mutate(label = paste0(" (", age, "歳：", act_y, "年", act_m, "か月", act_d, "日)")) # 年齢・活動年数ラベルを作成
+label_grad_df
+```
+
+　メンバー名と卒業時の年齢と活動日数を文字列結合します。各メンバーの卒業時のデータは`date`の最大値です。\
+
+　タイムラインチャートを作成します。
+
+```{r, fig.width=12, fig.height=10}
+# タイムラインを作成:デフォルトの配色
+ggplot() + 
+  geom_line(data = chart_df, mapping = aes(x = date, y = member_id, color = factor(member_id)), 
+            size = 2) + # 活動期間ライン
+  geom_text(data = label_join_df, mapping = aes(x = date, y = member_id, label = label, color = factor(member_id)), 
+            hjust = 1) + # 加入時ラベル
+  geom_text(data = label_grad_df, mapping = aes(x = date, y = member_id, label = label, color = factor(member_id)), 
+            hjust = 0) + # 卒業時ラベル
+  scale_x_date(breaks = date_vec, date_labels = "%Y-%m", guide = guide_axis(angle = 45), expand = c(0, 0)) + # x軸目盛
+  scale_y_reverse(breaks = seq(0, max(chart_df[["member_id"]]), by = 10)) + # y軸を反転
+  coord_cartesian(clip = "off") + # 表示範囲
+  theme(
+    plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
+    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
+    plot.margin = margin(t = 10, r = 120, b = 10, l = 80, unit = "pt"), # 全体の余白
+    legend.position = "none" # 凡例の表示位置
+  ) + # 図の体裁
+  labs(
+    title = paste0(group_name, "歴代メンバーの活動期間"), 
+    subtitle = paste0(
+      format(min(chart_df[["date"]]), format = "%Y年%m月%d日"), 
+      "～", format(max(chart_df[["date"]]), format = "%Y年%m月%d日"), 
+      "：総メンバー", max(chart_df[["member_id"]]), "人"
+    ), 
+    x = "年-月", y = "メンバー", 
+    caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
+  ) # ラベル
+```
+
+　y軸をメンバーIDにすることで、各メンバーの線を縦に並べて描画します。加入期ごとに昇順に並べるために、`scale_y_reverse()`でy軸の値を反転させます。\
+　加入時と卒業時のラベルを`geom_text()`で描画します。\
+\
+
+　各メンバーのラインをメンバーカラーで配色します。
+
+```{r, fig.width=12, fig.height=10}
+# タイムラインを作成:メンバーカラーで配色(color_list.Rを参照)
+ggplot() + 
+  geom_line(data = chart_df, mapping = aes(x = date, y = member_id, color = memberName), 
+            size = 2) + # 活動期間ライン
+  geom_label(data = label_join_df, mapping = aes(x = date, y = member_id, label = label, color = memberName), 
+             hjust = 1, fill = "gray92", label.size = 0, label.padding = unit(0.09, units = "lines")) + # 加入時ラベル
+  geom_label(data = label_grad_df, mapping = aes(x = date, y = member_id, label = label, color = memberName), 
+             hjust = 0, fill = "gray92", label.size = 0, label.padding = unit(0.09, units = "lines")) + # 卒業時ラベル
+  scale_color_manual(breaks = color_df[["member_name"]], values = color_df[["color_code"]]) + # 線の色
+  scale_fill_manual(breaks = color_df[["member_name"]], values = color_df[["color_code"]]) + # 塗りつぶしの色
+  scale_x_date(breaks = date_vec, date_labels = "%Y-%m", guide = guide_axis(angle = 45), expand = c(0, 0)) + # x軸目盛
+  scale_y_reverse(breaks = seq(0, max(chart_df[["member_id"]]), by = 10)) + # y軸を反転
+  coord_cartesian(clip = "off") + # 表示範囲
+  theme(
+    plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
+    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
+    #plot.background = element_rect(fill = "gray"), # 全体の背景
+    plot.margin = margin(t = 10, r = 120, b = 10, l = 80, unit = "pt"), # 全体の余白
+    legend.position = "none" # 凡例の表示位置
+  ) + # 図の体裁
+  labs(
+    title = paste0(group_name, "歴代メンバーの活動期間"), 
+    subtitle = paste0(
+      format(min(chart_df[["date"]]), format = "%Y年%m月%d日"), 
+      "～", format(max(chart_df[["date"]]), format = "%Y年%m月%d日"), 
+      "：総メンバー", max(chart_df[["member_id"]]), "人"
+    ), 
+    x = "年-月", y = "メンバー", 
+    caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
+  ) # ラベル
+```
+
+　`scale_color_manual()`の`breaks`引数に`color`引数に指定した値(文字列など)、`values`引数に色(色名やカラーコード)を指定します。各メンバーカラーに対応するカラーコード(のデータフレーム`color_df`)については「ColorPalette/MemberColorSample.R」を参照してください。\
+　メンバーカラーが白や薄い色だと背景色と被って見えなくなるため、`geom_label()`でラベルを描画します。この例では、ラベルを塗りつぶし(`fill`引数)をグラフ領域と同じ色でしています。\
+\
+
+
+## アニメーションによる可視化
+
+　次は、タイムラインを1か月ごとに表示するアニメーションを作成します。\
+\
+
+
+### 活動期間の集計：(月別)
+
+　グループを指定して、そのグループの歴代メンバーの活動期間を集計します。
+
+```{r}
+# グループを指定
+groupID_val <- 1
+
+# 活動期間を集計
+anime_df <- group_df |> 
+  # 活動期間に対応した行を作成
+  dplyr::filter(groupID == groupID_val) |> # 指定したグループを抽出
+  dplyr::mutate(
+    formDate = formDate |> 
+      lubridate::floor_date(unit = "mon"), 
+    dissolveDate = dplyr::if_else(
+      is.na(dissolveDate), true = lubridate::today(), false = dissolveDate
+    ) |> # 現在活動中であれば現在の日付を設定
+      lubridate::floor_date(unit = "mon"), 
+    n = lubridate::interval(start = formDate, end = dissolveDate) |> 
+      lubridate::time_length(unit = "mon") + 1
+  ) |> # 月数をカウント
+  tidyr::uncount(n) |> # 月数に応じて行を複製
+  dplyr::group_by(groupName) |> # 行番号用にグループ化
+  dplyr::mutate(idx = dplyr::row_number()) |> # 行番号を割り当て
+  dplyr::group_by(groupName, idx) |> # 1か月刻みの値の作成用にグループ化
+  dplyr::mutate(date = seq(from = formDate, to = dissolveDate, by = "mon")[idx]) |> # 複製した行を1か月刻みの値に変更
+  dplyr::group_by(date, groupID) |> # 重複の除去用にグループ化
+  dplyr::slice_max(formDate) |> # 重複する場合は新しい方を抽出
+  dplyr::ungroup() |> # グループ化を解除
+  dplyr::select(date, groupID, groupName) |> # 利用する列を取得
+  # メンバー情報を追加
+  tidyr::expand_grid(
+    join_df |> 
+      dplyr::filter(groupID == groupID_val) |> # 指定したグループを抽出
+      dplyr::arrange(joinDate, memberID) |> # メンバーIDの再設定用に並べ替え
+      dplyr::mutate(
+        member_id = dplyr::row_number(), # メンバーIDを再設定
+        gradDate = dplyr::if_else(
+          is.na(gradDate), true = lubridate::today(), false = gradDate
+        ) # 現在活動中であれば現在の日付を設定
+      ) |> 
+      dplyr::select(!groupID), # 結合時に重複する列を削除, 
+  ) |> # 日付情報を複製してメンバーIDを結合
+  dplyr::left_join(
+    member_df |> 
+      dplyr::select(memberID, memberName, birthDate) |> # 利用する列を取得
+      dplyr::group_by(memberID) |> # 
+      dplyr::slice_tail(n = 1), # 重複を除去:(slice_headなら改名前、slice_tailなら改名後を抽出)
+    by = "memberID"
+  ) |> # メンバー情報を結合
+  dplyr::arrange(date, member_id) |> # 昇順に並べ替え
+  dplyr::filter(date >= joinDate, date <= gradDate) |> # 活動期間中のデータを抽出
+  # メンバー情報を編集
+  dplyr::mutate(
+    age = lubridate::interval(start = birthDate, end = date) |> 
+      lubridate::time_length(unit = "year") |> 
+      floor(), # 年齢を計算
+    act_y = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "year") |> 
+      floor(), # 活動年数を計算
+    act_m = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "mon") |> 
+      floor() %% 12, # 活動月数-年数を計算
+    act_d = dplyr::if_else(
+      lubridate::day(lubridate::rollback(date)) >= lubridate::day(joinDate), # 加入日の日にちが存在しない月の場合
+      true = lubridate::interval(
+        start = date |> 
+          lubridate::rollback() |> # 1か月前の末日に変更
+          lubridate::floor_date(unit = "mon") + lubridate::day(joinDate) - 1, # 加入日と同じ日にちに変更
+        end = date
+      ) |> 
+        lubridate::time_length(unit = "day"), # 日にちの差を計算
+      false = 1
+    ), # 活動日数-年月数を計算
+    act_days = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "day"), # 活動日数を計算
+    label = paste0(
+      memberName, " (", age, "歳：", 
+      act_y, "年", act_m, "か月", stringr::str_pad(act_d, width = 2, pad = 0), "日)"
+    )
+  ) |> # ラベルを作成
+  dplyr::select(date, groupName, member_id, memberName, age, act_y, act_m, act_d, act_days, label) # 利用する列を取得
+anime_df
+```
+
+　グループIDを指定して、`group_df`から指定したグループのデータを取り出します。\
+　結成月から解散月までの全ての月(の日付)に対応する行を作成します。\
+　全ての月を複製して、各月において在籍していたメンバーの情報を結合します。\
+　ラベルとして表示するために、各月における年齢と活動日数を計算します。\
+\
+
+　各処理を細かく見ます。
+
+<details><summary>・コード(クリックで展開)</summary>
+
+　指定したグループの結成日・解散日または改名日のデータを取り出して、結成月(改名月)から解散月(次の改名月)までの全ての月に対応する行を作成します。
+
+```{r}
+# 活動期間に対応した行を作成
+df1 <- group_df |> 
+  dplyr::filter(groupID == groupID_val) |> # 指定したグループを抽出
+  dplyr::mutate(
+    formDate = formDate |> 
+      lubridate::floor_date(unit = "mon"), 
+    dissolveDate = dplyr::if_else(
+      is.na(dissolveDate), true = lubridate::today(), false = dissolveDate
+    ) |> # 現在活動中であれば現在の日付を設定
+      lubridate::floor_date(unit = "mon"), 
+    n = lubridate::interval(start = formDate, end = dissolveDate) |> 
+      lubridate::time_length(unit = "mon") + 1
+  ) |> # 月数をカウント
+  tidyr::uncount(n) |> # 月数に応じて行を複製
+  dplyr::group_by(groupName) |> # 行番号用にグループ化
+  dplyr::mutate(idx = dplyr::row_number()) |> # 行番号を割り当て
+  dplyr::group_by(groupName, idx) |> # 1か月刻みの値の作成用にグループ化
+  dplyr::mutate(date = seq(from = formDate, to = dissolveDate, by = "mon")[idx]) |> # 複製した行を1か月刻みの値に変更
+  dplyr::group_by(date, groupID) |> # 重複の除去用にグループ化
+  dplyr::slice_max(formDate) |> # 重複する場合は新しい方を抽出
+  dplyr::ungroup() # グループ化を解除
+df1
+```
+
+　`group_df`は、グループ名`groupName`と結成日(改名日)`formDate`・解散日(次の改名日)`dissolveDate`の情報を持ちます。(改名グループの場合はグループ名ごとに、)`formDate`から`dissolveDate`までの全ての月を作成します。\
+
+　指定したグループのデータ(行)を`filter()`で抽出します。\
+　`formDate, dissolveDate`列を`floor_date()`で結成月と解散月にします。ただし、現在活動中のグループであれば解散日が`NA`なので、`if_else()`と`is.na()`を使って、`today()`で現在の日付に変更しておきます。\
+　結成月から解散月までの月数を、`interval()`と`time_length()`を使って計算して、`n`列とします。`解散月 - 結成月`が求まるので`+1`します。\
+　(改名グループの場合はグループ名ごとに、)`uncount()`で`n`列の値と同じ行数に複製します。\
+　複製した行に`row_number()`で行番号を割り当てて`idx`列とします。\
+　結成月から解散月までの全ての月を`seq()`で作成して、行番号に対応するインデックスの要素を抽出して`date`列とします。\
+　改名日が月の途中だと月(`date`列の値)が重複するので、`slice_max()`で新しい方の行を抽出します。\
+\
+
+　所属メンバーの加入情報を追加して、さらにメンバー情報を追加します。
+
+```{r}
+# メンバー情報を追加
+df2 <- df1 |> 
+  dplyr::select(date, groupID, groupName) |> # 利用する列を取得
+  tidyr::expand_grid(
+    join_df |> 
+      dplyr::filter(groupID == groupID_val) |> # 指定したグループを抽出
+      dplyr::arrange(joinDate, memberID) |> # メンバーIDの再設定用に並べ替え
+      dplyr::mutate(
+        member_id = dplyr::row_number(), # メンバーIDを再設定
+        gradDate = dplyr::if_else(
+          is.na(gradDate), true = lubridate::today(), false = gradDate
+        ) # 現在活動中であれば現在の日付を設定
+      ) |> 
+      dplyr::select(!groupID), # 結合時に重複する列を削除, 
+  ) |> # 日付情報を複製してメンバーIDを結合
+  dplyr::left_join(
+    member_df |> 
+      dplyr::select(memberID, memberName, birthDate) |> # 利用する列を取得
+      dplyr::group_by(memberID) |> # 
+      dplyr::slice_tail(n = 1), # 重複を除去:(slice_headなら改名前、slice_tailなら改名後を抽出)
+    by = "memberID"
+  ) |> # メンバー情報を結合
+  dplyr::arrange(date, member_id) |> # 昇順に並べ替え
+  dplyr::filter(date >= joinDate, date <= gradDate) # 活動期間中のデータを抽出
+df2
+```
+
+　`join_df`から、指定したグループのメンバーのID・加入日・卒業日を結合します。結合する前に、データフレームを加工しておきます。\
+　加入順に並べ替えて、新たなメンバーIDを`row_number()`で割り当てます。加入順が同じ場合は、元のメンバーID順にします。\
+　現在活動中のメンバーであれば卒業日(`gradDate`列)が`NA`なので、`if_else()`と`is.na()`を使って、`today()`で現在の日付に変更します。\
+　加工した`join_df`の行と`df1`の行の全ての組み合わせを`expand_grid()`で作成します。これにより、全ての月(`df1`の行)をメンバー数に複製して、各メンバーの加入情報(`join_df`の列)を追加できます。\
+
+　`member_df`のメンバーID・メンバー名・誕生日列を`left_join()`で結合します。重複するメンバーが存在するため、`slice_head()`または`slice_tail()`で改名前または改名後のデータ(行)を抽出しておきます。改名していない(重複しない)場合は、上からでも下からでも1行なので、影響しません。\
+
+　ここまでで、全ての月に対してそれぞれ全てのメンバー情報を追加しました。メンバーごとに、活動期間(`date`の日付が加入`joinDate`から卒業`gradDate`まで)のデータ(行)を抽出します。\
+
+　`expand_grid()`は、次のようなデータフレームを作成します。
+
+```{r}
+tidyr::expand_grid(
+  date = c("2022-01-01", "2022-01-02", "2022-01-03"), 
+  id = 1:2
+)
+```
+
+　3日分の日付と2人分のIDの全ての組み合わせを作成します。日付をIDに対応するように複製していると言えます。\
+\
+
+　各月における年齢と活動日数(y年mか月d日のy・m・dの値)を計算します。
+
+```{r}
+# メンバー情報を編集
+df3 <- df2 |> 
+  dplyr::mutate(
+    age = lubridate::interval(start = birthDate, end = date) |> 
+      lubridate::time_length(unit = "year") |> 
+      floor(), # 年齢を計算
+    act_y = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "year") |> 
+      floor(), # 活動年数を計算
+    act_m = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "mon") |> 
+      floor() %% 12, # 活動月数-年数を計算
+    act_d = dplyr::if_else(
+      lubridate::day(lubridate::rollback(date)) >= lubridate::day(joinDate), # 加入日の日にちが存在しない月の場合
+      true = lubridate::interval(
+        start = date |> 
+          lubridate::rollback() |> # 1か月前の末日に変更
+          lubridate::floor_date(unit = "mon") + lubridate::day(joinDate) - 1, # 加入日と同じ日にちに変更
+        end = date
+      ) |> 
+        lubridate::time_length(unit = "day"), # 日にちの差を計算
+      false = 1
+    ), # 活動日数-年月数を計算
+    act_days = lubridate::interval(start = joinDate, end = date) |> 
+      lubridate::time_length(unit = "day"), # 活動日数を計算
+    label = paste0(
+      memberName, " (", age, "歳：", 
+      act_y, "年", act_m, "か月", stringr::str_pad(act_d, width = 2, pad = 0), "日)"
+    )
+  ) #|> # ラベルを作成
+  #dplyr::select(date, groupName, member_id, memberName, age, act_y, act_m, act_d, act_days, label) # 利用する列を取得
+df3
+```
+
+　`interval()`と`time_length()`の`unit`引数に`"year"`を指定して、`birthDate`から`date`までの年数を求めます。`floor()`で小数点以下を切り捨てると、各月におけるメンバーの年齢が得られます。\
+　同様に、`joinDate`から`date`までの年数で活動年数が得られます。\
+　`unit`引数に`"mon"`を指定すると月数を返します。`%%`演算子を使って`12`で割った余りを計算すると、y年mか月のmの値が得られます。\
+　y年mか月d日のdの値については、`if_else()`で条件分岐して処理します。基本的な(`true`引数の)計算では、`date`を、`rollback()`と`floor_date()`で1か月前の1日にし、さらに`day(joinDate)-1`を加えて、1か月前の加入日と同じ日にします。この日から`date`までの日数が、dになります。ただし、例えば加入日が30日で`date`が3月のときは`start`引数の値が3月2日になってしまいます。そこで、前月の末日(`lubridate::day(lubridate::rollback(date))`)が加入した日(`lubridate::day(joinDate)`)より小さい場合(加入日と同じ日が存在しない月の場合)は、`false`引数に`1`を指定します(1日目になります)。\
+　総活動日数も計算していますが、この値は使いません。\
+　年齢・活動年数ラベルを作成します。活動年数をyyyy年m月dd日の形式にするために、日にちが1桁の場合は`str_pad()`で2桁目を`0`で埋めます。\
+
+</details>
+
+\ 
+
+　以上で、必要なデータを得られました。次は、作図を行います。\
+\
+
+
+### アニメーションの作図
+
+　タイトル用に、グループ名を設定します。
+
+```{r}
+# グループ名を設定
+group_name <- anime_df[["groupName"]] |> 
+  unique() |> # 重複を削除
+  (\(x){x[1]})() # x[n]でn番目の要素を抽出
+group_name <- "モーニング娘。"
+group_name
+```
+
+　半自動で処理するためにラムダ関数`\()`を使っていますが、普通に文字列で指定する方が簡単だと思います。\
+
+　各月における在籍数を集計します。
+
+```{r}
+# 在籍数を計算
+member_n_df <- anime_df |> 
+  dplyr::count(date, name = "member_n") |> # メンバー数を集計
+  dplyr::mutate(label = paste0("在籍数：", member_n, "人")) # ラベルを作成
+member_n_df
+```
+
+　`count()`で同じ月(`date`列の重複)をカウントして、グラフに表示する用の文字列を作成します。\
+
+　x軸の値を作成します。
+
+```{r}
+# x軸の値(年)を作成
+date_vec <- seq(
+  from = anime_df[["date"]] |> 
+    min() |> # 最小値を取得
+    lubridate::floor_date(unit = "year"), # 年単位で切り捨て
+  to = anime_df[["date"]] |> 
+    max() |> # 最大値を取得
+    lubridate::ceiling_date(unit = "year"), # 年単位で切り上げ
+  by = "year"
+)
+head(date_vec)
+```
+
+　グループの活動期間(`date`列)の最小値の年から最大値の年までの値を作成します。\
+
+　フレームに関する値を設定します。
+
+```{r}
+# 1秒間に表示する月数を指定:(値が大きいと意図した通りにならない)
+mps <- 6
+
+# 最後のグラフでの停止フレーム数を指定
+ep <- 30
+
+# フレーム数を取得
+n <- length(unique(anime_df[["date"]]))
+n
+```
+
+　1秒当たりのフレーム数を`mps`として、整数を指定します。ただし、値が大きいと値の通りになりません。\
+　最後のフレーム(グラフ)で一時停止(同じグラフを表示)するフレーム数を`ep`として、整数を指定します。\
+　基本となるフレーム数(月数)を`n`とします。\
+
+　タイムラインのアニメーション(gif画像)を作成します。
+
+```{r}
+# タイムラインのアニメーションを作成:デフォルトの配色
+anim <- ggplot(data = anime_df, mapping = aes(x = date, y = member_id, color = factor(member_id))) + 
+  geom_vline(mapping = aes(xintercept = date), 
+             color = "gray56", size = 1, linetype = "dashed") + # 時間経過の垂線
+  geom_label(data = member_n_df, mapping = aes(x = date, y = 0, label = label), 
+             vjust = 0, color = "gray56") + # 在籍数ラベル
+  geom_line(size = 2) + # 活動期間ライン
+  geom_point(size = 4) + # 活動期間終点
+  geom_text(mapping = aes(label = paste("  ", label)), 
+            hjust = 0) + # メンバーラベル
+  gganimate::transition_reveal(date) + # フレーム
+  scale_x_date(breaks = date_vec, date_labels = "%Y", expand = c(0, 0)) + # x軸目盛
+  scale_y_reverse(breaks = seq(0, max(anime_df[["member_id"]]), by = 10)) + # y軸を反転
+  coord_cartesian(clip = "off") + # 表示範囲
+  theme(
+    plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
+    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
+    plot.margin = margin(t = 10, r = 200, b = 20, l = 40, unit = "pt"), # 全体の余白
+    legend.position = "none" # 凡例の表示位置
+  ) + # 図の体裁
+  labs(
+    title = paste0(group_name, "歴代メンバーの活動期間"), 
+    subtitle = paste0("{format(frame_along, format = '%Y年%m月')}01日時点"), 
+    x = "年", y = "メンバー", 
+    caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
+  ) # ラベル
+```
+
+　`transition_reveal()`にフレームの順序(各グラフに利用するデータ)を示す列を指定します。\
+
+　線や文字色をメンバーカラーにします。
+
+```{r}
+# タイムラインを作成:メンバーカラーで配色(color_list.Rを参照)
+anim <- ggplot(data = anime_df, mapping = aes(x = date, y = member_id, color = memberName)) + 
+  geom_vline(mapping = aes(xintercept = date), 
+             color = "gray56", size = 1, linetype = "dashed") + # 時間経過の垂線
+  geom_label(data = member_n_df, mapping = aes(x = date, y = 0, label = label), 
+             vjust = 0, color = "gray56") + # 在籍数ラベル
+  geom_label(mapping = aes(label = paste("  ", label)), 
+             hjust = 0, fill = "gray92", label.size = 0, label.padding = unit(0.1, units = "lines")) + # メンバーラベル
+  geom_line(size = 2) + # 活動期間ライン
+  geom_point(size = 4) + # 活動期間終点
+  gganimate::transition_reveal(date) + # フレーム
+  scale_color_manual(breaks = color_df[["member_name"]], values = color_df[["color_code"]]) + # 線の色
+  scale_x_date(breaks = date_vec, date_labels = "%Y", guide = guide_axis(angle = 0), expand = c(0, 0)) + # x軸目盛
+  scale_y_reverse(breaks = seq(0, max(anime_df[["member_id"]]), by = 10)) + # y軸を反転
+  coord_cartesian(clip = "off") + # 表示範囲
+  theme(
+    plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
+    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
+    plot.margin = margin(t = 10, r = 200, b = 20, l = 40, unit = "pt"), # 全体の余白
+    legend.position = "none" # 凡例の表示位置
+  ) + # 図の体裁
+  labs(
+    title = paste0(group_name, "歴代メンバーの活動期間"), 
+    subtitle = paste0("{format(lubridate::as_date(frame_along)+3, format = '%Y年%m月')}01日時点"), 
+    x = "年", y = "メンバー", 
+    caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
+  ) # ラベル
+```
+
+　`scale_color_manual()`の`breaks`引数に`color`引数に指定した値(文字列など)、`values`引数に色(色名やカラーコード)を指定します。\
+
+　`animate()`でgif画像を作成します。
+
+```{r, eval=FALSE}
+# gif画像を作成
+g <- gganimate::animate(
+  anim, nframes = n+ep, end_pause = ep, fps = mps, width = 1200, height = 900
+)
+g
+```
+
+　`plot`引数にグラフ、`nframes`引数にフレーム数、`end_pause`引数に最終グラフの表示フレーム数、`fps`引数に1秒当たりのフレーム数を指定します。\
+
+　`anim_save()`でgif画像を保存します。
+
+```{r, eval=FALSE}
+# gif画像を保存
+gganimate::anim_save(filename = "output/ActivePeriod.gif", animation = g)
+```
+
+　`filename`引数にファイルパス(`"(保存する)フォルダ名/(作成する)ファイル名.gif"`)、`animation`引数に作成したgif画像を指定します。\
+
+　動画を作成する場合は、`renderer`引数を指定します。
+
+```{r, eval=FALSE}
+# 動画を作成と保存
+m <- gganimate::animate(
+  plot = anim, 
+  nframes = n+ep, end_pause = ep, fps = mps,  
+  width = 1200, height = 900, 
+  renderer = gganimate::av_renderer(file = "output/ActivePeriod.mp4")
+)
+```
+
+　`renderer`引数に、レンダリング方法に応じた関数を指定します。この例では、`av_renderer()`を使います。\
+　`av_renderer()`の`file`引数に保存先のファイルパス(`"(保存する)フォルダ名/(作成する)ファイル名.mp4"`)を指定します。\
+\
+
