@@ -136,15 +136,14 @@ rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解
       lubridate::time_length(unit = "year") |> 
       floor() # メンバー年齢
   ) |> 
-  (
-    \(df) {
-      if(MinMax_flag == "min") {
-        dplyr::slice_min(df, age, n = 1, with_ties = FALSE, by = c(date, groupID)) # 最年少を抽出
-      } else if(MinMax_flag == "max") {
-        dplyr::slice_max(df, age, n = 1, with_ties = FALSE, by = c(date, groupID)) # 最年長を抽出
-      }
-    }
-  )() |> 
+  dplyr::summarise(
+    age  = dplyr::if_else(
+      MinMax_flag == "min", 
+      true  = min(age, na.rm = TRUE), # 最小年齢
+      false = max(age, na.rm = TRUE), # 最大年齢
+    ), 
+    .by = c(date, groupID, groupName)
+  ) |> 
   dplyr::bind_rows(
     outside_df # 結成前月, 解散翌月
   ) |> 
@@ -282,8 +281,10 @@ rank_month_df <- group_df |> # グループ名, 結成(改名)月, 解散(改名
   ) |> 
   dplyr::summarise(
     age  = dplyr::if_else(
-      MinMax_flag == "min", true = min(age), false = max(age), 
-    ), # 最小・最大年齢
+      MinMax_flag == "min", 
+      true  = min(age, na.rm = TRUE), # 最小年齢
+      false = max(age, na.rm = TRUE), # 最大年齢
+    ), 
     member_num = dplyr::n(), # グループメンバー数
     .by = c(date, groupID, groupName)
   ) |> 
