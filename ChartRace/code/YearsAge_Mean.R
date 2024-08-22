@@ -19,7 +19,9 @@ group_df  # グループ一覧
 join_df   # 加入・卒業日一覧
 
 
-# 期間の設定 -------------------------------------------------------------------
+# バーチャートレースの作成 ------------------------------------------------------------
+
+### 期間の設定 -----
 
 # 対象期間を指定
 date_from <- "1997-09-01"
@@ -43,9 +45,7 @@ date_min = date_vec[1]
 date_max = date_vec[length(date_vec)]
 
 
-# 演出用の処理 ------------------------------------------------------------------
-
-### グループ名の対応:(改名組の表示名に対応したい) -----
+### データの集計 -----
 
 # 活動月, グループID, グループ名の対応表を作成
 group_name_df <- group_df |> 
@@ -55,10 +55,10 @@ group_name_df <- group_df |>
     date_to   = dissolveDate |> 
       is.na() |> 
       dplyr::if_else(
-        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付
+        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or最大月
         false = dissolveDate
       ) |> 
-      lubridate::floor_date(unit = "month") # 解散・改名・現在or最大月
+      lubridate::floor_date(unit = "month") # 解散・改名・現在(最大)月
   ) |> 
   dplyr::reframe(
     date = seq(from = date_from, to = date_to, by = "month"), # 活動月
@@ -68,9 +68,6 @@ group_name_df <- group_df |>
   dplyr::select(date, groupID, groupName, formDate, dissolveDate) |> 
   dplyr::arrange(date, groupID) # 昇順
 group_name_df
-
-
-### 結成前月と解散月の追加:(バーの変化を強調したい) -----
 
 # 結成前月, 解散翌月のデータを作成
 member_0_df <- group_df |> 
@@ -107,14 +104,9 @@ member_0_df <- group_df |>
   dplyr::arrange(groupID, date) # 昇順
 member_0_df
 
-"2022-01-01" |> 
-  lubridate::as_date() |> 
-  lubridate::rollback()
-
-# 集計と順位付け ----------------------------------------------------------------------
-
 # 平均年齢, 順位を集計
 rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解散(改名)月
+  dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
   dplyr::left_join(
     join_df |> # メンバーID, 加入日, 卒業日
       dplyr::mutate(
@@ -127,7 +119,6 @@ rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解
       ), 
     by = "groupID", relationship = "many-to-many"
   ) |> 
-  dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
   dplyr::filter(dplyr::between(date, left = joinDate, right = gradDate)) |> # 活動中のメンバーを抽出
   dplyr::left_join(
     member_df |> # 生年月日
@@ -161,9 +152,7 @@ rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解
 rank_df
 
 
-# アニメーションの作成 ---------------------------------------------------------
-
-### フレーム数の設定 -----
+### アニメーションの作成 -----
 
 # 遷移フレーム数を指定
 t <- 8
@@ -176,9 +165,6 @@ mps <- 3
 
 # フレーム数を取得
 n <- length(unique(rank_df[["date"]]))
-
-
-### バーチャートレース -----
 
 # バーチャートレースを作図:(y軸可変)
 anim <- ggplot(
@@ -201,7 +187,7 @@ anim <- ggplot(
   gganimate::ease_aes("cubic-in-out") + # アニメーションの緩急
   gganimate::view_follow(fixed_x = TRUE) + # 表示範囲の可変
   coord_flip(clip = "off", expand = FALSE) + # 軸の入替
-  scale_x_reverse() + # x軸を反転
+  scale_x_reverse() + # ランク軸を反転
   theme(
     axis.title = element_blank(), # 軸ラベル
     axis.text  = element_blank(), # 軸目盛ラベル
@@ -232,25 +218,81 @@ m <- gganimate::animate(
   renderer = gganimate::av_renderer(file = "ChartRace/output/YearsAge_Mean.mp4")
 )
 
-warnings()
 
+# バーチャートの作成 ----------------------------------------------------------------
 
-# 月を指定して作図 ----------------------------------------------------------------
+### 期間の設定 -----
 
-# 月(月初の日付)を指定
+# 集計日を指定
 date_val <- "2014-01-01" |> 
-  lubridate::as_date() |> 
-  lubridate::floor_date(unit = "mon")
-date_val <- lubridate::today() |> 
-  lubridate::floor_date(unit = "mon")
+  lubridate::as_date()
+date_val <- lubridate::today()
 
-# 作図用のデータを抽出
-mon_rank_df <- rank_df |> 
-  dplyr::filter(date == date_val)
 
-# 棒グラフを作成
+### データの集計 -----
+
+# 平均年齢, 順位を集計
+rank_month_df <- group_df |> # グループ名, 結成(改名)月, 解散(改名)月
+  dplyr::mutate(
+    dissolveDate = dissolveDate |> 
+      is.na() |> 
+      dplyr::if_else(
+        true  = max(lubridate::today(), date_val), # 活動中なら現在の日付or集計日
+        false = dissolveDate
+      ) # 解散・改名・現在(集計)日
+  ) |> 
+  tibble::add_column(
+    date = date_val # 活動月
+  ) |> 
+  dplyr::filter(dplyr::between(date, left = formDate, right = dissolveDate)) |> # 活動中のグループを抽出
+  dplyr::left_join(
+    join_df |> # メンバーID, 加入日, 卒業日
+      dplyr::mutate(
+        gradDate = gradDate |> 
+          is.na() |> 
+          dplyr::if_else(
+            true  = max(lubridate::today(), date_val), # 活動中なら現在の日付or集計日
+            false = gradDate
+          )
+      ), 
+    by = "groupID", relationship = "many-to-many"
+  ) |> 
+  dplyr::filter(dplyr::between(date, left = joinDate, right = gradDate)) |> # 活動中のメンバーを抽出
+  dplyr::left_join(
+    member_df |> # 生年月日
+      dplyr::select(memberID, memberName, birthDate) |> 
+      dplyr::distinct(memberID, .keep_all = TRUE), # 重複を除去
+    by = "memberID"
+  ) |> 
+  dplyr::mutate(
+    member_age = lubridate::interval(start = birthDate, end = date) |> 
+      lubridate::time_length(unit = "year") |> 
+      floor() # メンバー年齢
+  ) |> 
+  dplyr::summarise(
+    age_total  = sum(member_age, na.rm = TRUE), # (生年月日非公開を除く)グループ合計年齢
+    member_num = sum(!is.na(birthDate)),        # (生年月日非公開を除く)グループメンバー数
+    member_num_all = dplyr::n(),                # グループメンバー数
+    .by = c(date, groupID, groupName)
+  ) |> 
+  dplyr::mutate(
+    age_mean = age_total / member_num # グループ平均年齢
+  ) |> 
+  dplyr::arrange(date, age_mean, groupID) |> # 順位付け用
+  dplyr::mutate(
+    ranking = dplyr::row_number(-age_mean), # 順位
+    .by = date
+  ) |> 
+  dplyr::select(date, groupID, groupName, member_num = member_num_all, age_mean, ranking) |> 
+  dplyr::arrange(date, ranking) # 昇順
+rank_month_df
+
+
+### グラフの作成 -----
+
+# バーチャートを作図
 graph <- ggplot(
-  data = mon_rank_df, 
+  data = rank_month_df, 
   mapping = aes(x = ranking, fill = factor(groupID), color = factor(groupID))
 ) + 
   geom_bar(
@@ -258,15 +300,15 @@ graph <- ggplot(
     stat = "identity", width = 0.9, alpha = 0.8
   ) + # 平均年齢バー
   geom_text(
-    mapping = aes(y = 0, label = paste(" ", round(age_mean, digits = 1), "歳")), 
+    mapping = aes(y = 0, label = paste0("  ", round(age_mean, digits = 1), "歳", " (", member_num, "人)")), 
     hjust = 0, color = "white"
   ) + # 平均年齢ラベル
   geom_text(
     mapping = aes(y = 0, label = paste(groupName, " ")), 
     hjust = 1
   ) + # グループ名ラベル
-  coord_flip(clip = "off", expand = FALSE) + # 軸の入れ変え
-  scale_x_reverse(breaks = 1:nrow(mon_rank_df)) + # x軸(縦軸)目盛を反転
+  coord_flip(clip = "off", expand = FALSE) + # 軸の入替
+  scale_x_reverse(breaks = 1:nrow(rank_month_df)) + # ランク軸を反転
   theme(
     axis.title.y = element_blank(), # y軸ラベル
     axis.text.y  = element_blank(), # y軸目盛ラベル
@@ -280,12 +322,12 @@ graph <- ggplot(
   ) + 
   labs(
     title = "ハロプログループの平均年齢", 
-    subtitle = paste0(
-      lubridate::year(date_val), "年", lubridate::month(date_val), "月1日時点"), 
+    subtitle = format(date_val, format = "%Y年%m月%d日時点"), 
     y = "年齢", 
     caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
   )
 graph
+
 
 # 画像を書出
 ggplot2::ggsave(
