@@ -1,209 +1,169 @@
 
-# グループごとの平均年齢の推移を可視化 -------------------------------------------------------------------
+# グループごとの平均年齢の推移 -------------------------------------------------------------------
 
 # 利用パッケージ
 library(tidyverse)
-library(lubridate)
 library(gganimate)
 
-# チェック用
-library(magrittr)
+# パッケージを読込
 library(ggplot2)
 
 
 # データの読込 -----------------------------------------------------------------
 
-# フォルダパスを指定
-dir_path <- "BarChartRace/data/HP_DB-main/"
+## ReadData.Rを参照
 
-# メンバー一覧を読み込み
-member_df <- readr::read_csv(
-  file = paste0(dir_path, "member.csv"), 
-  col_types = readr::cols(
-    memberID = "i", 
-    memberName = "c", 
-    HPjoinDate = readr::col_date(format = "%Y/%m/%d"), 
-    debutDate = readr::col_date(format = "%Y/%m/%d"), 
-    HPgradDate = readr::col_date(format = "%Y/%m/%d"), 
-    memberKana = "c", 
-    birthDate = readr::col_date(format = "%Y/%m/%d")
-  )
-) |> 
-  dplyr::arrange(memberID) # 昇順に並べ替え
-member_df
-
-# 加入・卒業日一覧を読み込み
-join_df <- readr::read_csv(
-  file = paste0(dir_path, "join.csv"), 
-  col_types = readr::cols(
-    memberID = "i", 
-    groupID = "i", 
-    joinDate = readr::col_date(format = "%Y/%m/%d"), 
-    gradDate = readr::col_date(format = "%Y/%m/%d")
-  )
-) |> 
-  dplyr::arrange(joinDate, memberID, groupID) # 昇順に並べ替え
-join_df
-
-# グループ一覧を読み込み
-group_df <- readr::read_csv(
-  file = paste0(dir_path, "group.csv"), 
-  col_types = readr::cols(
-    groupID = "i", 
-    groupName = "c", 
-    formDate = readr::col_date(format = "%Y/%m/%d"), 
-    dissolveDate = readr::col_date(format = "%Y/%m/%d"), 
-    isUnit = "l"
-  )
-) |> 
-  dplyr::arrange(groupID, formDate) # 昇順に並べ替え
-group_df
+# 利用データを確認
+member_df # メンバー一覧
+group_df  # グループ一覧
+join_df   # 加入・卒業日一覧
 
 
 # 期間の設定 -------------------------------------------------------------------
 
-# 集計期間を指定
+# 対象期間を指定
 date_from <- "1997-09-01"
-date_to   <- "2022-06-20"
+date_to   <- "2024-09-29"
 date_to   <- lubridate::today()
 
-# 月ベクトルを作成
+# 集計期間の月を作成
 date_vec <- seq(
   from = date_from |> 
     lubridate::as_date() |> 
-    lubridate::floor_date(unit = "mon"), 
-  to = date_to |> 
+    lubridate::floor_date(unit = "month"), # 集計開始(最小)月
+  to   = date_to |> 
     lubridate::as_date() |> 
-    lubridate::floor_date(unit = "mon"), 
-  by = "mon"
+    lubridate::floor_date(unit = "month"), # 集計終了(最大)月
+  by = "month"
 )
-length(date_vec) # フレーム数
+cat("frame:", length(date_vec)) # フレーム数
+
+# 集計期間を設定
+date_min = date_vec[1]
+date_max = date_vec[length(date_vec)]
 
 
 # 演出用の処理 ------------------------------------------------------------------
 
-### ・グループ名の対応:(改名組の表示名に対応したい) -----
+### グループ名の対応:(改名組の表示名に対応したい) -----
 
-# 月・グループID・グループ名の対応表を作成
+# 活動月, グループID, グループ名の対応表を作成
 group_name_df <- group_df |> 
   dplyr::mutate(
-    formDate = formDate |> 
-      lubridate::floor_date(unit = "mon"), 
-    dissolveDate = dissolveDate %>% 
+    date_from = formDate |> 
+      lubridate::floor_date(unit = "month"), # 結成・改名月
+    date_to   = dissolveDate |> 
+      is.na() |> 
       dplyr::if_else(
-        condition = is.na(.), 
-        true = lubridate::today(), 
+        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付
         false = dissolveDate
-      ) |> # 現在活動中なら現在の日付
-      lubridate::floor_date(unit = "mon"), 
-    n = lubridate::interval(start = formDate, end = dissolveDate) |> 
-      lubridate::time_length(unit = "mon") + 1
-  ) |> # 月単位に切り捨てて月数をカウント
-  tidyr::uncount(n) |> # 月数に応じて行を複製
-  dplyr::group_by(groupName) |> # 行番号用にグループ化
-  dplyr::mutate(idx = dplyr::row_number()) |> # 行番号を割り当て
-  dplyr::group_by(groupName, idx) |> # 1か月刻みの値の作成用にグループ化
-  dplyr::mutate(date = seq(from = formDate, to = dissolveDate, by = "mon")[idx]) |> # 複製した行を1か月刻みの値に変更
-  dplyr::group_by(date, groupID) |> # 重複の除去用にグループ化
-  dplyr::slice_max(formDate) |> # 重複する場合は新しい方を抽出
-  dplyr::ungroup() |> # グループ化を解除
-  dplyr::select(date, groupID, groupName, formDate, dissolveDate) |> # 利用する列を選択
-  dplyr::arrange(date, groupID) # 昇順に並べ替え
+      ) |> 
+      lubridate::floor_date(unit = "month") # 解散・改名・現在or最大月
+  ) |> 
+  dplyr::reframe(
+    date = seq(from = date_from, to = date_to, by = "month"), # 活動月
+    .by = dplyr::everything()
+  ) |> 
+  dplyr::slice_min(formDate, by = c(date, groupID)) |> # 月途中の改名なら重複するので改名前を抽出
+  dplyr::select(date, groupID, groupName, formDate, dissolveDate) |> 
+  dplyr::arrange(date, groupID) # 昇順
 group_name_df
 
 
-### ・結成前月と解散月の追加:(バーの変化を強調したい) -----
+### 結成前月と解散月の追加:(バーの変化を強調したい) -----
 
-# 結成前月・解散月のデータを作成
+# 結成前月, 解散翌月のデータを作成
 member_0_df <- group_df |> 
-  dplyr::group_by(groupID) |> # 日付の再設定用にグループ化
-  dplyr::mutate(dissolveDate = dplyr::lead(dissolveDate, n = max(dplyr::n())-1)) |> # 最後の行を1行目にズラす
-  dplyr::slice_head(n = 1) |> # 1行目を抽出
-  dplyr::ungroup() |> # グループ化を解除
+  dplyr::summarise(
+    formDate     = min(formDate),     # 結成日
+    dissolveDate = max(dissolveDate), # 解散日
+    .by = groupID
+  ) |> # 改名情報を統合
   dplyr::mutate(
-    formDate = formDate |> 
-      lubridate::rollback() |> # 結成1か月前に変更
-      lubridate::floor_date(unit = "mon"), 
-    dissolveDate = dissolveDate |> 
-      lubridate::floor_date(unit = "mon")
-  ) |> # 月単位に切り捨て
+    date_pre = formDate |> 
+      lubridate::floor_date(unit = "month"), # 結成月
+    date_pre = (date_pre == formDate)|> 
+      dplyr::if_else(
+        true = date_pre |> 
+          lubridate::rollback() |> 
+          lubridate::floor_date(unit = "month"), # 結成月が月初なら結成前月
+        false = date_pre
+      ), 
+    date_post = dissolveDate |> 
+      lubridate::rollforward(roll_to_first = TRUE)  # 解散翌月
+  ) |>　
   tidyr::pivot_longer(
-    cols = c(formDate, dissolveDate), 
-    names_to = "date_type", 
+    cols      = c(date_pre, date_post), 
+    names_to  = "date_type", 
     values_to = "date"
-  ) |> # 結成前月・解散月を同じ列に変形
-  dplyr::select(date, groupID) |> # 利用する列を選択
-  dplyr::filter(!is.na(date)) |> # 現在活動中のグループの解散月を除去
+  ) |> # 月列をまとめる
+  dplyr::select(date, groupID) |> 
+  dplyr::filter(!is.na(date)) |> # 活動中なら解散月を除去
   tibble::add_column(
     groupName = " ", 
-    age_total = 0, 
-    member_n = 0, 
-    age_mean = 0
-  ) |> # メンバー数(0人)を追加
-  dplyr::filter(date > min(date_vec), date < max(date_vec)) |> # 指定した期間内のデータを抽出
-  dplyr::arrange(date, groupID) # 昇順に並び替え
+    age_mean  = 0
+  ) |> # 疑似集計データを追加
+  dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
+  dplyr::arrange(groupID, date) # 昇順
 member_0_df
 
+"2022-01-01" |> 
+  lubridate::as_date() |> 
+  lubridate::rollback()
 
 # 集計と順位付け ----------------------------------------------------------------------
 
-# サイズを取得
-group_size  <- max(group_df[["groupID"]])
-member_size <- max(member_df[["memberID"]])
-
-# 平均年齢を集計
-rank_df <- tidyr::expand_grid(
-  date = date_vec, 
-  groupID = 1:group_size, 
-  memberID = 1:member_size
-) |> # 全ての組み合わせを作成
-  dplyr::left_join(group_name_df, by = c("date", "groupID")) |> # グループ情報を結合
-  dplyr::filter(date >= formDate, date <= dissolveDate) |> # 活動中のグループを抽出
-  dplyr::select(!c(formDate, dissolveDate)) |> # 不要な列を削除
+# 平均年齢, 順位を集計
+rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解散(改名)月
   dplyr::left_join(
-    join_df |> 
+    join_df |> # メンバーID, 加入日, 卒業日
       dplyr::mutate(
-        joinDate = lubridate::floor_date(joinDate, unit = "mon"), 
-        gradDate = lubridate::floor_date(gradDate, unit = "mon")
-      ), # 月単位に切り捨て
-    by = c("groupID", "memberID")
-  ) |> # 所属メンバー情報を結合
-  dplyr::filter(date >= joinDate, date < gradDate | is.na(gradDate)) |> # 活動中のメンバーを抽出
-  dplyr::select(!c(joinDate, gradDate)) |> # 不要な列を削除
+        gradDate = gradDate |> 
+          is.na() |> 
+          dplyr::if_else(
+            true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or最大月
+            false = gradDate
+          )
+      ), 
+    by = "groupID", relationship = "many-to-many"
+  ) |> 
+  dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
+  dplyr::filter(dplyr::between(date, left = joinDate, right = gradDate)) |> # 活動中のメンバーを抽出
   dplyr::left_join(
-    member_df |> 
+    member_df |> # 生年月日
+      dplyr::select(memberID, memberName, birthDate) |> 
       dplyr::distinct(memberID, .keep_all = TRUE), # 重複を除去
     by = "memberID"
-  ) |> # メンバー情報を結合
-  dplyr::select(date, groupID, groupName, memberID, memberName, birthDate) |> # 利用する列を選択
+  ) |> 
   dplyr::mutate(
-    age = lubridate::interval(start = birthDate, end = date) |> 
+    member_age = lubridate::interval(start = birthDate, end = date) |> 
       lubridate::time_length(unit = "year") |> 
-      floor()
-  ) |> # メンバーの年齢を計算
-  dplyr::group_by(date, groupID, groupName) |> # 平均年齢の計算用にグループ化
+      floor() # メンバー年齢
+  ) |> 
   dplyr::summarise(
-    age_total = sum(age, na.rm = TRUE), 
-    member_n = sum(!is.na(birthDate)), 
-    .groups = "drop"
-  ) |> # グループの合計年齢と(計算に使った)メンバー数を計算
-  dplyr::mutate(age_mean = age_total / member_n) |> # グループの平均年齢を計算
-  dplyr::bind_rows(member_0_df) |> # 結成前月・解散月を追加
-  dplyr::arrange(date, age_mean, groupID) |> # 順位付け用に並べ替え
-  dplyr::group_by(date) |> # 順位付け用にグループ化
+    age_total  = sum(member_age, na.rm = TRUE), # (生年月日非公開を除く)グループ合計年齢
+    member_num = sum(!is.na(birthDate)),        # (生年月日非公開を除く)グループメンバー数
+    .by = c(date, groupID, groupName)
+  ) |> 
   dplyr::mutate(
-    groupID = factor(groupID), 
-    ranking = dplyr::row_number(-age_mean), 
-  ) |> # 順位を追加
-  dplyr::ungroup() |> # グループ化を解除
-  dplyr::select(date, groupID, groupName, age_mean, ranking) |> # 利用する列を選択
-  dplyr::arrange(date, ranking) # 昇順に並べ替え
+    age_mean = age_total / member_num # グループ平均年齢
+  ) |> 
+  dplyr::bind_rows(
+    member_0_df # 結成前月, 解散翌月
+  ) |> 
+  dplyr::arrange(date, age_mean, groupID) |> # 順位付け用
+  dplyr::mutate(
+    ranking = dplyr::row_number(-age_mean), # 順位
+    .by = date
+  ) |> 
+  dplyr::select(date, groupID, groupName, age_mean, ranking) |> 
+  dplyr::arrange(date, ranking) # 昇順
 rank_df
 
 
-# アニメーションの作成 --------------------------------------------------------------
+# アニメーションの作成 ---------------------------------------------------------
 
-### ・フレーム数の設定 -----
+### フレーム数の設定 -----
 
 # 遷移フレーム数を指定
 t <- 8
@@ -218,36 +178,42 @@ mps <- 3
 n <- length(unique(rank_df[["date"]]))
 
 
-### ・バーチャートレース -----
+### バーチャートレース -----
 
-# バーチャートレースを作成:(y軸可変)
-anim <- ggplot(rank_df, aes(x = ranking, y = age_mean, fill = groupID, color = groupID)) + 
-  geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 平均年齢バー
-  geom_text(aes(label = paste(" ", round(age_mean, digits = 1), "歳")), hjust = 0) + # 平均年齢ラベル
-  geom_text(aes(y = 0, label = paste(groupName, " ")), hjust = 1) + # グループ名ラベル
-  gganimate::transition_states(states = date, transition_length = t, state_length = s, wrap = FALSE) + # フレーム
+# バーチャートレースを作図:(y軸可変)
+anim <- ggplot(
+  data = rank_df, 
+  mapping = aes(x = ranking, fill = factor(groupID), color = factor(groupID))
+) + 
+  geom_bar(
+    mapping = aes(y = age_mean), 
+    stat = "identity", width = 0.9, alpha = 0.8
+  ) + # 平均年齢バー
+  geom_text(
+    mapping = aes(y = age_mean, label = paste(" ", round(age_mean, digits = 1), "歳")), 
+    hjust = 0
+  ) + # 平均年齢ラベル
+  geom_text(
+    mapping = aes(y = 0, label = paste(groupName, " ")), 
+    hjust = 1
+  ) + # グループ名ラベル
+  gganimate::transition_states(states = date, transition_length = t, state_length = s, wrap = FALSE) + # フレーム切替
   gganimate::ease_aes("cubic-in-out") + # アニメーションの緩急
-  gganimate::view_follow(fixed_x = TRUE) + # 表示範囲のフィット
-  coord_flip(clip = "off", expand = FALSE) + # 軸の入れ変え
+  gganimate::view_follow(fixed_x = TRUE) + # 表示範囲の可変
+  coord_flip(clip = "off", expand = FALSE) + # 軸の入替
   scale_x_reverse() + # x軸を反転
   theme(
-    axis.title.x = element_blank(), # x軸のラベル
-    axis.title.y = element_blank(), # y軸のラベル
-    axis.text.x = element_blank(), # x軸の目盛ラベル
-    axis.text.y = element_blank(), # y軸の目盛ラベル
-    axis.ticks.x = element_blank(), # x軸の目盛指示線
-    axis.ticks.y = element_blank(), # y軸の目盛指示線
-    #panel.grid.major.x = element_line(color = "grey", size = 0.1), # x軸の主目盛線
-    panel.grid.major.y = element_blank(), # y軸の主目盛線
-    #panel.grid.minor.x = element_line(color = "grey", size = 0.1), # x軸の補助目盛線
-    panel.grid.minor.y = element_blank(), # y軸の補助目盛線
+    axis.title = element_blank(), # 軸ラベル
+    axis.text  = element_blank(), # 軸目盛ラベル
+    axis.ticks = element_blank(), # 軸目盛指示線
+    panel.grid.major.y = element_blank(), # y軸主目盛線
+    panel.grid.minor.y = element_blank(), # y軸補助目盛線
     panel.border = element_blank(), # グラフ領域の枠線
-    #panel.background = element_blank(), # グラフ領域の背景
-    plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
-    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
-    plot.margin = margin(t = 10, r = 60, b = 10, l = 120, unit = "pt"), # 全体の余白
-    legend.position = "none" # 凡例の表示位置
-  ) + # 図の体裁
+    plot.title    = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 図タイトル
+    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 図サブタイトル
+    plot.margin   = margin(t = 10, r = 60, b = 10, l = 120, unit = "pt"), # 図の余白
+    legend.position = "none" # 凡例の位置
+  ) + 
   labs(
     title = "ハロプログループの平均年齢の推移", 
     subtitle = paste0(
@@ -256,29 +222,15 @@ anim <- ggplot(rank_df, aes(x = ranking, y = age_mean, fill = groupID, color = g
       "01日時点"
     ), 
     caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
-  ) # ラベル
+  )
 
-
-# gif画像を作成
-g <- gganimate::animate(
-  plot = anim, 
-  nframes = n*(t+s), fps = (t+s)*mps, 
-  width = 900, height = 600
-)
-g
-
-# gif画像を保存
-gganimate::anim_save(filename = "BarChartRace/output/YearsAge_Mean.gif", animation = g)
-
-
-# 動画を作成と保存
+# 動画を作成
 m <- gganimate::animate(
   plot = anim, 
-  nframes = n*(t+s), fps = (t+s)*mps, 
+  nframes = (t+s)*n, fps = (t+s)*mps, 
   width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = "BarChartRace/output/YearsAge_Mean.mp4")
+  renderer = gganimate::av_renderer(file = "ChartRace/output/YearsAge_Mean.mp4")
 )
-
 
 warnings()
 
@@ -286,45 +238,58 @@ warnings()
 # 月を指定して作図 ----------------------------------------------------------------
 
 # 月(月初の日付)を指定
-date_val <- "2014-01-01"
+date_val <- "2014-01-01" |> 
+  lubridate::as_date() |> 
+  lubridate::floor_date(unit = "mon")
+date_val <- lubridate::today() |> 
+  lubridate::floor_date(unit = "mon")
 
 # 作図用のデータを抽出
 mon_rank_df <- rank_df |> 
-  dplyr::filter(date == lubridate::as_date(date_val))
+  dplyr::filter(date == date_val)
 
 # 棒グラフを作成
-graph <- ggplot(mon_rank_df, aes(x = ranking, y = age_mean, fill = groupID, color = groupID)) + 
-  geom_bar(stat = "identity", width = 0.9, alpha = 0.8) + # 平均年齢バー
-  geom_text(aes(y = 0, label = paste(" ", round(age_mean, digits = 1), "歳")), hjust = 0, color = "white") + # 平均年齢ラベル
-  geom_text(aes(y = 0, label = paste(groupName, " ")), hjust = 1) + # グループ名ラベル
+graph <- ggplot(
+  data = mon_rank_df, 
+  mapping = aes(x = ranking, fill = factor(groupID), color = factor(groupID))
+) + 
+  geom_bar(
+    mapping = aes(y = age_mean), 
+    stat = "identity", width = 0.9, alpha = 0.8
+  ) + # 平均年齢バー
+  geom_text(
+    mapping = aes(y = 0, label = paste(" ", round(age_mean, digits = 1), "歳")), 
+    hjust = 0, color = "white"
+  ) + # 平均年齢ラベル
+  geom_text(
+    mapping = aes(y = 0, label = paste(groupName, " ")), 
+    hjust = 1
+  ) + # グループ名ラベル
   coord_flip(clip = "off", expand = FALSE) + # 軸の入れ変え
   scale_x_reverse(breaks = 1:nrow(mon_rank_df)) + # x軸(縦軸)目盛を反転
   theme(
-    axis.title.y = element_blank(), # y軸のラベル
-    axis.text.y = element_blank(), # y軸の目盛ラベル
-    #panel.grid.major.x = element_line(color = "grey", size = 0.1), # x軸の主目盛線
-    panel.grid.major.y = element_blank(), # y軸の主目盛線
-    #panel.grid.minor.x = element_line(color = "grey", size = 0.1), # x軸の補助目盛線
-    panel.grid.minor.y = element_blank(), # y軸の補助目盛線
+    axis.title.y = element_blank(), # y軸ラベル
+    axis.text.y  = element_blank(), # y軸目盛ラベル
+    panel.grid.major.y = element_blank(), # y軸主目盛線
+    panel.grid.minor.y = element_blank(), # y軸補助目盛線
     panel.border = element_blank(), # グラフ領域の枠線
-    #panel.background = element_blank(), # グラフ領域の背景
-    plot.title = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 全体のタイトル
-    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 全体のサブタイトル
-    plot.margin = margin(t = 10, r = 20, b = 10, l = 120, unit = "pt"), # 全体の余白
-    legend.position = "none" # 凡例の表示位置
-  ) + # 図の体裁
+    plot.title    = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 図タイトル
+    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 図サブタイトル
+    plot.margin   = margin(t = 10, r = 20, b = 10, l = 120, unit = "pt"), # 図の余白
+    legend.position = "none" # 凡例の位置
+  ) + 
   labs(
     title = "ハロプログループの平均年齢", 
     subtitle = paste0(
       lubridate::year(date_val), "年", lubridate::month(date_val), "月1日時点"), 
     y = "年齢", 
     caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
-  ) # ラベル
+  )
 graph
 
-# 画像を保存
+# 画像を書出
 ggplot2::ggsave(
-  filename = paste0("BarChartRace/output/YearsAge_Mean_", date_val, ".png"), plot = graph, 
+  filename = paste0("ChartRace/output/YearsAge_Mean_", date_val, ".png"), plot = graph, 
   width = 24, height = 18, units = "cm", dpi = 100
 )
 
