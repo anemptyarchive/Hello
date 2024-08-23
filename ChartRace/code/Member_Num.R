@@ -22,26 +22,15 @@ join_df   # 加入・卒業日一覧
 
 ### 期間の設定 -----
 
-# 対象期間を指定
-date_from <- "1997-09-01"
-date_to   <- "2024-09-29"
-date_to   <- lubridate::today()
-
-# 集計期間の月を作成
-date_vec <- seq(
-  from = date_from |> 
-    lubridate::as_date() |> 
-    lubridate::floor_date(unit = "month"), # 集計開始(最小)月
-  to   = date_to |> 
-    lubridate::as_date() |> 
-    lubridate::floor_date(unit = "month"), # 集計終了(最大)月
-  by = "month"
-)
-cat("frame:", length(date_vec)) # フレーム数
-
-# 集計期間を設定
-date_min = date_vec[1]
-date_max = date_vec[length(date_vec)]
+# 集計期間を指定
+date_min <- "1997-09-01" |> 
+  lubridate::as_date() |> 
+  lubridate::floor_date(unit = "month") # 集計開始(最小)月
+date_max <- "2024-09-29" |> 
+  lubridate::as_date() |> 
+  lubridate::floor_date(unit = "month") # 集計終了(最大)月
+date_max <- lubridate::today()|> 
+  lubridate::floor_date(unit = "month") # 集計終了(最大)月
 
 
 ### データの集計 -----
@@ -63,7 +52,7 @@ group_name_df <- group_df |>
     date = seq(from = date_from, to = date_to, by = "month"), # 活動月
     .by = dplyr::everything()
   ) |> 
-  dplyr::slice_min(formDate, by = c(date, groupID)) |> # 月途中の改名なら重複するので改名前を抽出
+  dplyr::slice_min(formDate, n = 1, with_ties = FALSE, by = c(date, groupID)) |> # 月途中の改名なら重複するので改名前を抽出
   dplyr::select(date, groupID, groupName, formDate, dissolveDate) |> 
   dplyr::arrange(date, groupID) # 昇順
 group_name_df
@@ -158,11 +147,11 @@ anim <- ggplot(
   geom_bar(
     mapping = aes(y = member_num), 
     stat = "identity", width = 0.9, alpha = 0.8
-  ) + # メンバー数バー
+  ) + # 人数バー
   geom_text(
     mapping = aes(y = member_num, label = paste(" ", member_num, "人")), 
     hjust = 0
-  ) + # メンバー数ラベル
+  ) + # 人数ラベル
   geom_text(
     mapping = aes(y = 0, label = paste(groupName, " ")), 
     hjust = 1
@@ -245,13 +234,11 @@ rank_month_df <- group_df |> # グループ名, 結成(改名)月, 解散(改名
   ) |> 
   dplyr::arrange(date, member_num, groupID) |> # 順位付け用
   dplyr::mutate(
-    ranking = dplyr::row_number(-member_num), # 順位
-    .by = date
+    ranking = dplyr::row_number(-member_num) # 順位
   ) |> 
   dplyr::select(date, groupID, groupName, member_num, ranking) |> 
-  dplyr::arrange(date, ranking) # 昇順
+  dplyr::arrange(ranking) # 昇順
 rank_month_df
-
 
 
 ### グラフの作成 -----
@@ -264,11 +251,11 @@ graph <- ggplot(
   geom_bar(
     mapping = aes(y = member_num), 
     stat = "identity", width = 0.9, alpha = 0.8
-  ) + # メンバー数バー
+  ) + # 人数バー
   geom_text(
-    mapping = aes(y = 0, label = paste(" ", member_num, "人")), 
+    mapping = aes(y = 0, label = paste0("  ", member_num, "人")), 
     hjust = 0, color = "white"
-  ) + # メンバー数ラベル
+  ) + # 人数ラベル
   geom_text(
     mapping = aes(y = 0, label = paste(groupName, " ")), 
     hjust = 1

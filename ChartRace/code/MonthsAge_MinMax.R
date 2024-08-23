@@ -23,26 +23,15 @@ join_df   # 加入・卒業日一覧
 
 ### 期間の設定 -----
 
-# 対象期間を指定
-date_from <- "1997-09-01"
-date_to   <- "2024-09-29"
-date_to   <- lubridate::today()
-
-# 集計期間の月を作成
-date_vec <- seq(
-  from = date_from |> 
-    lubridate::as_date() |> 
-    lubridate::floor_date(unit = "month"), # 集計開始(最小)月
-  to   = date_to |> 
-    lubridate::as_date() |> 
-    lubridate::floor_date(unit = "month"), # 集計終了(最大)月
-  by = "month"
-)
-cat("frame:", length(date_vec)) # フレーム数
-
-# 集計期間を設定
-date_min = date_vec[1]
-date_max = date_vec[length(date_vec)]
+# 集計期間を指定
+date_min <- "1997-09-01" |> 
+  lubridate::as_date() |> 
+  lubridate::floor_date(unit = "month") # 集計開始(最小)月
+date_max <- "2024-09-29" |> 
+  lubridate::as_date() |> 
+  lubridate::floor_date(unit = "month") # 集計終了(最大)月
+date_max <- lubridate::today()|> 
+  lubridate::floor_date(unit = "month") # 集計終了(最大)月
 
 
 ### データの集計 -----
@@ -68,7 +57,7 @@ group_name_df <- group_df |>
     date = seq(from = date_from, to = date_to, by = "month"), # 活動月
     .by = dplyr::everything()
   ) |> 
-  dplyr::slice_min(formDate, by = c(date, groupID)) |> # 月途中の改名なら重複するので改名前を抽出
+  dplyr::slice_min(formDate, n = 1, with_ties = FALSE, by = c(date, groupID)) |> # 月途中の改名なら重複するので改名前を抽出
   dplyr::select(date, groupID, groupName, formDate, dissolveDate) |> 
   dplyr::arrange(date, groupID) # 昇順
 group_name_df
@@ -101,8 +90,8 @@ outside_df <- group_df |>
   dplyr::select(date, groupID) |> 
   dplyr::filter(!is.na(date)) |> # 活動中なら解散月を除去
   tibble::add_column(
-    groupName = " ", 
-    age       = 0
+    groupName  = " ", 
+    member_age = 0
   ) |> # 疑似集計データを追加
   dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
   dplyr::arrange(groupID, date) # 昇順
@@ -131,29 +120,29 @@ rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解
     by = "memberID"
   ) |> 
   dplyr::mutate(
-    age = lubridate::interval(start = birthDate, end = date) |> 
+    member_age = lubridate::interval(start = birthDate, end = date) |> 
       lubridate::time_length(unit = "month") |> 
       floor() # メンバー月齢
   ) |> 
   dplyr::summarise(
-    age = dplyr::if_else(
+    member_age = dplyr::if_else(
       MinMax_flag == "min", 
-      true  = min(age, na.rm = TRUE), # 最小月齢
-      false = max(age, na.rm = TRUE), # 最大月齢
+      true  = min(member_age, na.rm = TRUE), # 最小月齢
+      false = max(member_age, na.rm = TRUE), # 最大月齢
     ), 
     .by = c(date, groupID, groupName)
   ) |> 
   dplyr::bind_rows(
     outside_df # 結成前月, 解散翌月
   ) |> 
-  dplyr::arrange(date, age, groupID) |> # 順位付け用
+  dplyr::arrange(date, member_age, groupID) |> # 順位付け用
   dplyr::mutate(
-    age_years  = age %/% 12, # グループ平均年齢
-    age_months = age %% 12,  # グループ平均月齢 - 平均年齢
-    ranking    = dplyr::row_number(-age), # 順位
+    age_years  = member_age %/% 12, # グループ平均年齢
+    age_months = member_age %% 12,  # グループ平均月齢 - 平均年齢
+    ranking    = dplyr::row_number(-member_age), # 順位
     .by = date
   ) |> 
-  dplyr::select(date, groupID, groupName, age, age_years, age_months, ranking) |> 
+  dplyr::select(date, groupID, groupName, member_age, age_years, age_months, ranking) |> 
   dplyr::arrange(date, ranking) # 昇順
 rank_df
 
@@ -172,17 +161,17 @@ mps <- 3
 # フレーム数を取得
 n <- length(unique(rank_df[["date"]]))
 
-# バーチャートレースを作成:(y軸可変)
+# バーチャートレースを作図:(y軸可変)
 anim <- ggplot(
   data = rank_df, 
   mapping = aes(x = ranking, fill = factor(groupID), color = factor(groupID))
 ) + 
   geom_bar(
-    mapping = aes(y = age), 
+    mapping = aes(y = member_age), 
     stat = "identity", width = 0.9, alpha = 0.8
   ) + # 月齢バー
   geom_text(
-    mapping = aes(y = age, label = paste(" ", age_years, "歳", age_months, "か月")), 
+    mapping = aes(y = member_age, label = paste0("  ", age_years, "歳", age_months, "か月")), 
     hjust = 0
   ) + # 月齢ラベル
   geom_text(
@@ -208,9 +197,9 @@ anim <- ggplot(
   ) + 
   labs(
     title = ifelse(
-      MinMax_flag == "min", 
-      yes = "ハロプログループの最年少メンバーの月齢の推移", 
-      no  = "ハロプログループの最年長メンバーの月齢の推移"
+      test = MinMax_flag == "min", 
+      yes  = "ハロプログループの最年少メンバーの月齢の推移", 
+      no   = "ハロプログループの最年長メンバーの月齢の推移"
     ), 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
@@ -276,35 +265,34 @@ rank_month_df <- group_df |> # グループ名, 結成(改名)月, 解散(改名
     by = "memberID"
   ) |> 
   dplyr::mutate(
-    age = lubridate::interval(start = birthDate, end = date) |> 
+    member_age = lubridate::interval(start = birthDate, end = date) |> 
       lubridate::time_length(unit = "month") |> 
       floor() # メンバー月齢
   ) |> 
   dplyr::summarise(
-    age = dplyr::if_else(
+    member_age = dplyr::if_else(
       MinMax_flag == "min", 
-      true  = min(age, na.rm = TRUE), # 最小月齢
-      false = max(age, na.rm = TRUE), # 最大月齢
+      true  = min(member_age, na.rm = TRUE), # 最小月齢
+      false = max(member_age, na.rm = TRUE), # 最大月齢
     ), 
     member_num = dplyr::n(), # グループメンバー数
     .by = c(date, groupID, groupName)
   ) |> 
-  dplyr::arrange(date, age, groupID) |> # 順位付け用
+  dplyr::arrange(date, member_age, groupID) |> # 順位付け用
   dplyr::mutate(
-    age_years  = age %/% 12, # グループ平均年齢
-    age_months = age %% 12,  # グループ平均月齢 - 平均年齢
-    ranking    = dplyr::row_number(-age), # 順位
-    .by = date
+    age_years  = member_age %/% 12, # グループ平均年齢
+    age_months = member_age %% 12,  # グループ平均月齢 - 平均年齢
+    ranking    = dplyr::row_number(-member_age) # 順位
   ) |> 
-  dplyr::select(date, groupID, groupName, member_num, age, age_years, age_months, ranking) |> 
-  dplyr::arrange(date, ranking) # 昇順
+  dplyr::select(date, groupID, groupName, member_num, member_age, age_years, age_months, ranking) |> 
+  dplyr::arrange(ranking) # 昇順
 rank_month_df
 
 
 ### グラフの作成 -----
 
-# 平均年齢の最大値を取得
-years_max <- max(rank_month_df[["age"]]) %/% 12
+# 年齢の最大値を取得
+years_max <- max(rank_month_df[["member_age"]]) %/% 12
 
 # 軸目盛の間隔を指定
 tick_val <- 5
@@ -315,7 +303,7 @@ graph <- ggplot(
   mapping = aes(x = ranking, fill = factor(groupID), color = factor(groupID))
 ) + 
   geom_bar(
-    mapping = aes(y = age), 
+    mapping = aes(y = member_age), 
     stat = "identity", width = 0.9, alpha = 0.8
   ) + # 月齢バー
   geom_text(
@@ -348,9 +336,9 @@ graph <- ggplot(
   ) + 
   labs(
     title = ifelse(
-      MinMax_flag == "min", 
-      yes = "ハロプログループの最年少メンバーの年齢", 
-      no  = "ハロプログループの最年長メンバーの年齢"
+      test = MinMax_flag == "min", 
+      yes  = "ハロプログループの最年少メンバーの年齢", 
+      no   = "ハロプログループの最年長メンバーの年齢"
     ), 
     subtitle = format(date_val, format = "%Y年%m月%d日時点"), 
     y = "年齢", 
