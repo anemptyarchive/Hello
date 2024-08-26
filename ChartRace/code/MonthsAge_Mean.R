@@ -313,7 +313,7 @@ graph <- ggplot(
     axis.text.y  = element_blank(), # y軸目盛ラベル
     panel.grid.major.y = element_blank(), # y軸主目盛線
     panel.grid.minor.y = element_blank(), # y軸補助目盛線
-    panel.border = element_blank(), # グラフ領域の枠線
+    panel.border       = element_blank(), # グラフ領域の枠線
     plot.title    = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 図タイトル
     plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 図サブタイトル
     plot.margin   = margin(t = 10, r = 20, b = 10, l = 120, unit = "pt"), # 図の余白

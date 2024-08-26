@@ -86,8 +86,8 @@ outside_df <- group_df |>
   dplyr::select(date, groupID) |> 
   dplyr::filter(!is.na(date)) |> # 活動中なら解散月を除去
   tibble::add_column(
-    groupName = " ", 
-    mean_exp  = 0
+    groupName   = " ", 
+    mean_period = 0
   ) |> # 疑似集計データを追加
   dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
   dplyr::arrange(groupID, date) # 昇順
@@ -116,29 +116,29 @@ rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解
     by = "memberID"
   ) |> 
   dplyr::mutate(
-    member_exp = lubridate::interval(start = HPjoinDate, end = date) |> 
+    member_period = lubridate::interval(start = HPjoinDate, end = date) |> 
       lubridate::time_length(unit = "month") |> 
       floor() # メンバー加入月数
   ) |> 
   dplyr::summarise(
-    total_exp  = sum(member_exp), # グループ合計加入月数
-    member_num = dplyr::n(),      # グループメンバー数
+    total_period = sum(member_period), # グループ合計加入月数
+    member_num   = dplyr::n(),      # グループメンバー数
     .by = c(date, groupID, groupName)
   ) |> 
   dplyr::mutate(
-    mean_exp = total_exp / member_num # グループ平均加入月数
+    mean_period = total_period / member_num # グループ平均加入月数
   ) |> 
   dplyr::bind_rows(
     outside_df # 結成前月, 解散翌月
   ) |> 
-  dplyr::arrange(date, mean_exp, groupID) |> # 順位付け用
+  dplyr::arrange(date, mean_period, groupID) |> # 順位付け用
   dplyr::mutate(
-    exp_years  = mean_exp %/% 12, # グループ平均加入年数
-    exp_months = mean_exp %% 12,  # グループ平均加入月数 - 平均加入年数
-    ranking    = dplyr::row_number(-mean_exp), # 順位
+    period_years  = mean_period %/% 12, # グループ平均加入年数
+    period_months = mean_period %% 12,  # グループ平均加入月数 - 平均加入年数
+    ranking       = dplyr::row_number(-mean_period), # 順位
     .by = date
   ) |> 
-  dplyr::select(date, groupID, groupName, mean_exp, exp_years, exp_months, ranking) |> 
+  dplyr::select(date, groupID, groupName, mean_period, period_years, period_months, ranking) |> 
   dplyr::arrange(date, ranking) # 昇順
 rank_df
 
@@ -163,11 +163,11 @@ anim <- ggplot(
   mapping = aes(x = ranking, fill = factor(groupID), color = factor(groupID))
 ) + 
   geom_bar(
-    mapping = aes(y = mean_exp), 
+    mapping = aes(y = mean_period), 
     stat = "identity", width = 0.9, alpha = 0.8
   ) + # 月数バー
   geom_text(
-    mapping = aes(y = mean_exp, label = paste(" ", exp_years, "年", round(exp_months, digits = 1), "か月")), 
+    mapping = aes(y = mean_period, label = paste(" ", period_years, "年", round(period_months, digits = 1), "か月")), 
     hjust = 0
   ) + # 月数ラベル
   geom_text(
@@ -206,7 +206,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = (t+s)*n, fps = (t+s)*mps, 
   width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = "ChartRace/output/JoinExp_mean.mp4")
+  renderer = gganimate::av_renderer(file = "ChartRace/output/JoinPeriod_mean.mp4")
 )
 
 
@@ -253,25 +253,25 @@ rank_month_df <- group_df |> # グループ名, 結成(改名)月, 解散(改名
     by = "memberID"
   ) |> 
   dplyr::mutate(
-    member_exp = lubridate::interval(start = HPjoinDate, end = date) |> 
+    member_period = lubridate::interval(start = HPjoinDate, end = date) |> 
       lubridate::time_length(unit = "month") |> 
       floor() # メンバー加入月数
   ) |> 
   dplyr::summarise(
-    total_exp  = sum(member_exp), # グループ合計加入月数
-    member_num = dplyr::n(),      # グループメンバー数
+    total_period = sum(member_period), # グループ合計加入月数
+    member_num   = dplyr::n(),      # グループメンバー数
     .by = c(date, groupID, groupName)
   ) |> 
   dplyr::mutate(
-    mean_exp = total_exp / member_num # グループ平均加入月数
+    mean_period = total_period / member_num # グループ平均加入月数
   ) |> 
-  dplyr::arrange(date, mean_exp, groupID) |> # 順位付け用
+  dplyr::arrange(date, mean_period, groupID) |> # 順位付け用
   dplyr::mutate(
-    exp_years  = mean_exp %/% 12, # グループ平均加入年数
-    exp_months = mean_exp %% 12,  # グループ平均加入月数 - 平均加入年数
-    ranking    = dplyr::row_number(-mean_exp) # 順位
+    period_years  = mean_period %/% 12, # グループ平均加入年数
+    period_months = mean_period %% 12,  # グループ平均加入月数 - 平均加入年数
+    ranking       = dplyr::row_number(-mean_period) # 順位
   ) |> 
-  dplyr::select(date, groupID, groupName, mean_exp, exp_years, exp_months, ranking) |> 
+  dplyr::select(date, groupID, groupName, mean_period, period_years, period_months, ranking) |> 
   dplyr::arrange(ranking) # 昇順
 rank_month_df
 
@@ -279,7 +279,7 @@ rank_month_df
 ### グラフの作成 -----
 
 # 年数の最大値を取得
-years_max <- max(rank_month_df[["mean_exp"]]) %/% 12
+years_max <- max(rank_month_df[["mean_period"]]) %/% 12
 
 # 軸目盛の間隔を指定
 tick_val <- 5
@@ -290,11 +290,11 @@ graph <- ggplot(
   mapping = aes(x = ranking, fill = factor(groupID), color = factor(groupID))
 ) + 
   geom_bar(
-    mapping = aes(y = mean_exp), 
+    mapping = aes(y = mean_period), 
     stat = "identity", width = 0.9, alpha = 0.8
   ) + # 月数バー
   geom_text(
-    mapping = aes(y = 0, label = paste0("  ", exp_years, "年", round(exp_months, digits = 1), "か月")), 
+    mapping = aes(y = 0, label = paste0("  ", period_years, "年", round(period_months, digits = 1), "か月")), 
     hjust = 0, color = "white"
   ) + # 月数ラベル
   geom_text(
@@ -312,7 +312,7 @@ graph <- ggplot(
     axis.text.y  = element_blank(), # y軸目盛ラベル
     panel.grid.major.y = element_blank(), # y軸主目盛線
     panel.grid.minor.y = element_blank(), # y軸補助目盛線
-    panel.border = element_blank(), # グラフ領域の枠線
+    panel.border       = element_blank(), # グラフ領域の枠線
     plot.title    = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 図タイトル
     plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 図サブタイトル
     plot.margin   = margin(t = 10, r = 20, b = 10, l = 120, unit = "pt"), # 図の余白
@@ -328,7 +328,7 @@ graph
 
 # 画像を書出
 ggplot2::ggsave(
-  filename = paste0("ChartRace/output/JoinExp_mean_", date_val, ".png"), plot = graph, 
+  filename = paste0("ChartRace/output/JoinPeriod_mean_", date_val, ".png"), plot = graph, 
   width = 24, height = 18, units = "cm", dpi = 100
 )
 
