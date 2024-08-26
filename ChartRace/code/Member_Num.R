@@ -14,8 +14,12 @@ library(ggplot2)
 ## ReadData.Rを参照
 
 # 利用データを確認
-group_df  # グループ一覧
-join_df   # 加入・卒業日一覧
+group_df # グループ一覧
+join_df  # 加入・卒業日一覧
+
+# 前処理データを確認
+group_name_df # 活動月, グループID, グループ名の対応表
+outside_df    # 結成前月, 解散翌月の一覧:(バーの変化の強調用)
 
 
 # バーチャートレースの作成 -----------------------------------------------------
@@ -35,61 +39,10 @@ date_max <- lubridate::today()|>
 
 ### データの集計 -----
 
-# 活動月, グループID, グループ名の対応表を作成
-group_name_df <- group_df |> 
-  dplyr::mutate(
-    date_from = formDate |> 
-      lubridate::floor_date(unit = "month"), # 結成・改名月
-    date_to   = dissolveDate |> 
-      is.na() |> 
-      dplyr::if_else(
-        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or最大月
-        false = dissolveDate
-      ) |> 
-      lubridate::floor_date(unit = "month") # 解散・改名・現在(最大)月
-  ) |> 
-  dplyr::reframe(
-    date = seq(from = date_from, to = date_to, by = "month"), # 活動月
-    .by = dplyr::everything()
-  ) |> 
-  dplyr::slice_min(formDate, n = 1, with_ties = FALSE, by = c(date, groupID)) |> # 月途中の改名なら重複するので改名前を抽出
-  dplyr::select(date, groupID, groupName, formDate, dissolveDate) |> 
-  dplyr::arrange(date, groupID) # 昇順
-group_name_df
-
-# 結成前月, 解散翌月のデータを作成:(バーの変化の強調用)
-outside_df <- group_df |> 
-  dplyr::summarise(
-    formDate     = min(formDate),     # 結成日
-    dissolveDate = max(dissolveDate), # 解散日
-    .by = groupID
-  ) |> # 改名情報を統合
-  dplyr::mutate(
-    date_pre = formDate |> 
-      lubridate::floor_date(unit = "month"), # 結成月
-    date_pre = (date_pre == formDate)|> 
-      dplyr::if_else(
-        true = date_pre |> 
-          lubridate::rollback() |> 
-          lubridate::floor_date(unit = "month"), # 結成月が月初なら結成前月
-        false = date_pre
-      ), 
-    date_post = dissolveDate |> 
-      lubridate::rollforward(roll_to_first = TRUE)  # 解散翌月
-  ) |>　
-  tidyr::pivot_longer(
-    cols      = c(date_pre, date_post), 
-    names_to  = "date_type", 
-    values_to = "date"
-  ) |> # 月列をまとめる
-  dplyr::select(date, groupID) |> 
-  dplyr::filter(!is.na(date)) |> # 活動中なら解散月を除去
-  tibble::add_column(
-    groupName  = " ", 
-    member_num = 0
-  ) |> # 疑似集計データを追加
+# 結成前月, 解散翌月のデータを調整
+outside_df <- outside_df |> 
   dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
-  dplyr::arrange(groupID, date) # 昇順
+  dplyr::rename(mean_period = target) # 結合後の列名に変更
 outside_df
 
 # メンバー数, 順位を集計

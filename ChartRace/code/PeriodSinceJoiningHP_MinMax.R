@@ -1,6 +1,5 @@
 
-# グループごとの新メンバー・古参メンバー加入月数(活動歴)の推移 -----------------
-
+# グループごとの新メンバー・古参メンバーハロプロ加入月数(活動歴)の推移 ---------
 # 利用パッケージ
 library(tidyverse)
 library(gganimate)
@@ -14,9 +13,13 @@ library(ggplot2)
 ## ReadData.Rを参照
 
 # 利用データを確認
-member_df # メンバー一覧
 group_df  # グループ一覧
 join_df   # 加入・卒業日一覧
+member_df # メンバー一覧
+
+# 前処理データを確認
+group_name_df # 活動月, グループID, グループ名の対応表
+outside_df    # 結成前月, 解散翌月の一覧:(バーの変化の強調用)
 
 
 # バーチャートレースの作成 -----------------------------------------------------
@@ -40,64 +43,13 @@ date_max <- lubridate::today()|>
 MinMax_flag <- "min"
 MinMax_flag <- "max"
 
-# 活動月, グループID, グループ名の対応表を作成
-group_name_df <- group_df |> 
-  dplyr::mutate(
-    date_from = formDate |> 
-      lubridate::floor_date(unit = "month"), # 結成・改名月
-    date_to   = dissolveDate |> 
-      is.na() |> 
-      dplyr::if_else(
-        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or最大月
-        false = dissolveDate
-      ) |> 
-      lubridate::floor_date(unit = "month") # 解散・改名・現在(最大)月
-  ) |> 
-  dplyr::reframe(
-    date = seq(from = date_from, to = date_to, by = "month"), # 活動月
-    .by = dplyr::everything()
-  ) |> 
-  dplyr::slice_min(formDate, n = 1, with_ties = FALSE, by = c(date, groupID)) |> # 月途中の改名なら重複するので改名前を抽出
-  dplyr::select(date, groupID, groupName, formDate, dissolveDate) |> 
-  dplyr::arrange(date, groupID) # 昇順
-group_name_df
-
-# 結成前月, 解散翌月のデータを作成:(バーの変化の強調用)
-outside_df <- group_df |> 
-  dplyr::summarise(
-    formDate     = min(formDate),     # 結成日
-    dissolveDate = max(dissolveDate), # 解散日
-    .by = groupID
-  ) |> # 改名情報を統合
-  dplyr::mutate(
-    date_pre = formDate |> 
-      lubridate::floor_date(unit = "month"), # 結成月
-    date_pre = (date_pre == formDate)|> 
-      dplyr::if_else(
-        true = date_pre |> 
-          lubridate::rollback() |> 
-          lubridate::floor_date(unit = "month"), # 結成月が月初なら結成前月
-        false = date_pre
-      ), 
-    date_post = dissolveDate |> 
-      lubridate::rollforward(roll_to_first = TRUE)  # 解散翌月
-  ) |>　
-  tidyr::pivot_longer(
-    cols      = c(date_pre, date_post), 
-    names_to  = "date_type", 
-    values_to = "date"
-  ) |> # 月列をまとめる
-  dplyr::select(date, groupID) |> 
-  dplyr::filter(!is.na(date)) |> # 活動中なら解散月を除去
-  tibble::add_column(
-    groupName     = " ", 
-    member_period = 0
-  ) |> # 疑似集計データを追加
+# 結成前月, 解散翌月のデータを調整
+outside_df <- outside_df |> 
   dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
-  dplyr::arrange(groupID, date) # 昇順
+  dplyr::rename(mean_period = target) # 結合後の列名に変更
 outside_df
 
-# 最小or最大加入月数, 順位を集計
+# 最小or最大活動月数, 順位を集計
 rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解散(改名)月
   dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
   dplyr::left_join(
@@ -116,19 +68,19 @@ rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解
   dplyr::left_join(
     member_df |> # HP加入日
       dplyr::select(memberID, memberName, HPjoinDate) |> 
-      dplyr::slice_min(HPjoinDate, n = 1, with_ties = FALSE, by = c(memberID)), # 重複を除去
+      dplyr::slice_min(HPjoinDate, n = 1, with_ties = FALSE, by = memberID), # 重複を除去
     by = "memberID"
   ) |> 
   dplyr::mutate(
     member_period = lubridate::interval(start = HPjoinDate, end = date) |> 
       lubridate::time_length(unit = "month") |> 
-      floor() # メンバー加入月数
+      floor() # メンバー活動月数
   ) |> 
   dplyr::summarise(
     member_period = dplyr::if_else(
       MinMax_flag == "min", 
-      true  = min(member_period, na.rm = TRUE), # 最小加入月数
-      false = max(member_period, na.rm = TRUE), # 最大加入月数
+      true  = min(member_period, na.rm = TRUE), # 最小活動月数
+      false = max(member_period, na.rm = TRUE), # 最大活動月数
     ), 
     .by = c(date, groupID, groupName)
   ) |> 
@@ -137,8 +89,8 @@ rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解
   ) |> 
   dplyr::arrange(date, member_period, groupID) |> # 順位付け用
   dplyr::mutate(
-    period_years  = member_period %/% 12, # グループ平均加入年数
-    period_months = member_period %% 12,  # グループ平均加入月数 - 平均加入年数
+    period_years  = member_period %/% 12, # グループ平均活動年数
+    period_months = member_period %% 12,  # グループ平均活動月数 - 平均活動年数
     ranking       = dplyr::row_number(-member_period), # 順位
     .by = date
   ) |> 
@@ -198,8 +150,8 @@ anim <- ggplot(
   labs(
     title = ifelse(
       test = MinMax_flag == "min", 
-      yes  = "ハロプログループの最小加入年数の推移", 
-      no   = "ハロプログループの最大加入年数の推移"
+      yes  = "ハロプログループの最小活動月数の推移:(ハロプロ加入日基準)", 
+      no   = "ハロプログループの最大活動月数の推移:(ハロプロ加入日基準)"
     ), 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
@@ -214,7 +166,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = (t+s)*n, fps = (t+s)*mps, 
   width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/JoinPeriod_", MinMax_flag, ".mp4"))
+  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/PeriodJoinHP_", MinMax_flag, ".mp4"))
 )
 
 warnings()
@@ -233,7 +185,7 @@ date_val <- lubridate::today()
 MinMax_flag <- "min"
 MinMax_flag <- "max"
 
-# 最小or最大加入月数, 順位を集計
+# 最小or最大活動月数, 順位を集計
 rank_month_df <- group_df |> # グループ名, 結成(改名)月, 解散(改名)月
   dplyr::mutate(
     dissolveDate = dissolveDate |> 
@@ -263,27 +215,27 @@ rank_month_df <- group_df |> # グループ名, 結成(改名)月, 解散(改名
   dplyr::left_join(
     member_df |> # HP加入日
       dplyr::select(memberID, memberName, HPjoinDate) |> 
-      dplyr::slice_min(HPjoinDate, n = 1, with_ties = FALSE, by = c(memberID)), # 重複を除去
+      dplyr::slice_min(HPjoinDate, n = 1, with_ties = FALSE, by = memberID), # 重複を除去
     by = "memberID"
   ) |> 
   dplyr::mutate(
     member_period = lubridate::interval(start = HPjoinDate, end = date) |> 
       lubridate::time_length(unit = "month") |> 
-      floor() # メンバー加入月数
+      floor() # メンバー活動月数
   ) |> 
   dplyr::summarise(
     member_period = dplyr::if_else(
       MinMax_flag == "min", 
-      true  = min(member_period, na.rm = TRUE), # 最小加入月数
-      false = max(member_period, na.rm = TRUE), # 最大加入月数
+      true  = min(member_period, na.rm = TRUE), # 最小活動月数
+      false = max(member_period, na.rm = TRUE), # 最大活動月数
     ), 
     member_num = dplyr::n(), # グループメンバー数
     .by = c(date, groupID, groupName)
   ) |> 
   dplyr::arrange(date, member_period, groupID) |> # 順位付け用
   dplyr::mutate(
-    period_years  = member_period %/% 12, # グループ平均加入年数
-    period_months = member_period %% 12,  # グループ平均加入月数 - 平均加入年数
+    period_years  = member_period %/% 12, # グループ平均活動年数
+    period_months = member_period %% 12,  # グループ平均活動月数 - 平均活動年数
     ranking       = dplyr::row_number(-member_period) # 順位
   ) |> 
   dplyr::select(date, groupID, groupName, member_num, member_period, period_years, period_months, ranking) |> 
@@ -339,8 +291,8 @@ graph <- ggplot(
   labs(
     title = ifelse(
       test = MinMax_flag == "min", 
-      yes  = "ハロプログループの最年少メンバーの年齢", 
-      no   = "ハロプログループの最年長メンバーの年齢"
+      yes  = "ハロプログループの最小活動月数:(ハロプロ加入日基準)", 
+      no   = "ハロプログループの最大活動月数:(ハロプロ加入日基準)"
     ), 
     subtitle = format(date_val, format = "%Y年%m月%d日時点"), 
     y = "年数", 
@@ -350,7 +302,7 @@ graph
 
 # 画像を書出
 ggplot2::ggsave(
-  filename = paste0("ChartRace/output/JoinPeriod_", MinMax_flag, "_", date_val, ".png"), plot = graph, 
+  filename = paste0("ChartRace/output/PeriodJoinHP_", MinMax_flag, "_", date_val, ".png"), plot = graph, 
   width = 24, height = 18, units = "cm", dpi = 100
 )
 
