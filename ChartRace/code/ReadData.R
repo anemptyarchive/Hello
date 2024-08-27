@@ -60,7 +60,22 @@ member_df
 
 # データの前処理 -----------------------------------------------------------------
 
-# 活動月, グループID, グループ名の対応表を作成
+### 期間の設定 -----
+
+# 集計期間を指定
+date_min <- "1997-09-01" |> 
+  lubridate::as_date() |> 
+  lubridate::floor_date(unit = "month") # 集計開始(最小)月
+date_max <- "2024-09-29" |> 
+  lubridate::as_date() |> 
+  lubridate::floor_date(unit = "month") # 集計終了(最大)月
+date_max <- lubridate::today()|> 
+  lubridate::floor_date(unit = "month") # 集計終了(最大)月
+
+
+### 演出用データの作成 -----
+
+# 活動月, グループID, グループ名の対応表を作成:(改名の対応用)
 group_name_df <- group_df |> 
   dplyr::mutate(
     date_from = formDate |> 
@@ -109,10 +124,7 @@ outside_df <- group_df |>
   ) |> # 月列をまとめる
   dplyr::select(date, groupID) |> 
   dplyr::filter(!is.na(date)) |> # 活動中なら解散月を除去
-  tibble::add_column(
-    groupName = " ", 
-    target    = 0
-  ) |> # 疑似集計データを追加
+  dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
   dplyr::arrange(groupID, date) # 昇順
 outside_df
 
@@ -128,6 +140,9 @@ member_df |>
 member_df |> 
   dplyr::filter(HPjoinDate > debutDate)
 
-
+df <- join_df |> 
+  dplyr::left_join(member_df, by = "memberID", relationship = "many-to-many") |> 
+  dplyr::mutate(n = dplyr::n(), .by = memberID) |> 
+  dplyr::filter(n > 1)
 
 

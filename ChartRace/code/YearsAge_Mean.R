@@ -22,28 +22,20 @@ member_df # メンバー一覧
 group_name_df # 活動月, グループID, グループ名の対応表
 outside_df    # 結成前月, 解散翌月の一覧:(バーの変化の強調用)
 
+# 集計期間を確認
+date_min; date_max
+
 
 # バーチャートレースの作成 -----------------------------------------------------
-
-### 期間の設定 -----
-
-# 集計期間を指定
-date_min <- "1997-09-01" |> 
-  lubridate::as_date() |> 
-  lubridate::floor_date(unit = "month") # 集計開始(最小)月
-date_max <- "2024-09-29" |> 
-  lubridate::as_date() |> 
-  lubridate::floor_date(unit = "month") # 集計終了(最大)月
-date_max <- lubridate::today()|> 
-  lubridate::floor_date(unit = "month") # 集計終了(最大)月
-
 
 ### データの集計 -----
 
 # 結成前月, 解散翌月のデータを調整
 outside_df <- outside_df |> 
-  dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
-  dplyr::rename(mean_age = target) # 結合後の列名に変更
+  dplyr::mutate(
+    groupName = " ", 
+    mean_age  = 0
+  ) # 疑似集計データを追加
 outside_df
 
 # 平均年齢, 順位を集計
@@ -97,10 +89,10 @@ rank_df
 ### アニメーションの作成 -----
 
 # 遷移フレーム数を指定
-t <- 8
+t <- 9
 
 # 一時停止フレーム数を指定
-s <- 2
+s <- 1
 
 # 1秒間に表示する月数を指定:(値が大きいと意図した通りにならない)
 mps <- 3
