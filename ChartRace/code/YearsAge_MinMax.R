@@ -44,7 +44,6 @@ outside_df
 
 # 最小or最大年齢, 順位を集計
 rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解散(改名)月
-  dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
   dplyr::left_join(
     join_df |> # メンバーID, 加入日, 卒業日
       dplyr::mutate(
@@ -71,7 +70,7 @@ rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解
   ) |> 
   dplyr::summarise(
     member_age = dplyr::if_else(
-      MinMax_flag == "min", 
+      condition = MinMax_flag == "min", 
       true  = min(member_age, na.rm = TRUE), # 最小年齢
       false = max(member_age, na.rm = TRUE), # 最大年齢
     ), 
@@ -214,7 +213,7 @@ rank_month_df <- group_df |> # グループ名, 結成(改名)月, 解散(改名
   ) |> 
   dplyr::summarise(
     member_age  = dplyr::if_else(
-      MinMax_flag == "min", 
+      condition = MinMax_flag == "min", 
       true  = min(member_age, na.rm = TRUE), # 最小年齢
       false = max(member_age, na.rm = TRUE), # 最大年齢
     ), 

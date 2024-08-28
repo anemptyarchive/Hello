@@ -58,7 +58,7 @@ member_df <- readr::read_csv(
 member_df
 
 
-# データの前処理 -----------------------------------------------------------------
+# データの前処理 ---------------------------------------------------------------
 
 ### 期間の設定 -----
 
@@ -93,6 +93,7 @@ group_name_df <- group_df |>
     .by = dplyr::everything()
   ) |> 
   dplyr::slice_min(formDate, n = 1, with_ties = FALSE, by = c(date, groupID)) |> # 月途中の改名なら重複するので改名前を抽出
+  dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
   dplyr::select(date, groupID, groupName, formDate, dissolveDate) |> 
   dplyr::arrange(date, groupID) # 昇順
 group_name_df
@@ -122,9 +123,9 @@ outside_df <- group_df |>
     names_to  = "date_type", 
     values_to = "date"
   ) |> # 月列をまとめる
-  dplyr::select(date, groupID) |> 
   dplyr::filter(!is.na(date)) |> # 活動中なら解散月を除去
   dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
+  dplyr::select(date, groupID) |> 
   dplyr::arrange(groupID, date) # 昇順
 outside_df
 
