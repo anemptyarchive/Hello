@@ -135,8 +135,8 @@ anim <- ggplot(
   labs(
     title = ifelse(
       test = MinMax_flag == "min", 
-      yes  = "ハロプログループの最小活動月数の推移:(グループ加入日基準)", 
-      no   = "ハロプログループの最大活動月数の推移:(グループ加入日基準)"
+      yes  = "ハロプログループ・ユニットの最小活動月数の推移:(グループ加入日基準)", 
+      no   = "ハロプログループ・ユニットの最大活動月数の推移:(グループ加入日基準)"
     ), 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
@@ -264,8 +264,8 @@ graph <- ggplot(
   labs(
     title = ifelse(
       test = MinMax_flag == "min", 
-      yes  = "ハロプログループの最小活動月数:(グループ加入日基準)", 
-      no   = "ハロプログループの最大活動月数:(グループ加入日基準)"
+      yes  = "ハロプログループ・ユニットの最小活動月数:(グループ加入日基準)", 
+      no   = "ハロプログループ・ユニットの最大活動月数:(グループ加入日基準)"
     ), 
     subtitle = format(date_val, format = "%Y年%m月%d日時点"), 
     y = "年数", 

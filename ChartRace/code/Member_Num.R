@@ -39,7 +39,6 @@ outside_df
 
 # メンバー数, 順位を集計
 rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解散(改名)月
-  dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
   dplyr::left_join(
     join_df |> # メンバーID, 加入日, 卒業日
       dplyr::mutate(
@@ -112,14 +111,14 @@ anim <- ggplot(
     axis.ticks = element_blank(), # 軸目盛指示線
     panel.grid.major.y = element_blank(), # y軸主目盛線
     panel.grid.minor.y = element_blank(), # y軸補助目盛線
-    panel.border = element_blank(), # グラフ領域の枠線
+    panel.border       = element_blank(), # グラフ領域の枠線
     plot.title    = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 図タイトル
     plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 図サブタイトル
     plot.margin   = margin(t = 10, r = 60, b = 10, l = 120, unit = "pt"), # 図の余白
     legend.position = "none" # 凡例の位置
   ) + 
   labs(
-    title = "ハロプログループのメンバー数の推移", 
+    title = "ハロプログループ・ユニットのメンバー数の推移", 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
       "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)}月", 
@@ -219,7 +218,7 @@ graph <- ggplot(
     legend.position = "none" # 凡例の位置
   ) + 
   labs(
-    title = "ハロプログループのメンバー数", 
+    title = "ハロプロ・ユニットグループのメンバー数", 
     subtitle = format(date_val, format = "%Y年%m月%d日時点"), 
     y = "人数", 
     caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"

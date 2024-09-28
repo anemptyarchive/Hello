@@ -134,7 +134,7 @@ anim <- ggplot(
     legend.position = "none" # 凡例の位置
   ) + 
   labs(
-    title = "ハロプログループの平均年齢の推移", 
+    title = "ハロプログループ・ユニットの平均年齢の推移", 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
       "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)}月", 
@@ -250,7 +250,7 @@ graph <- ggplot(
     legend.position = "none" # 凡例の位置
   ) + 
   labs(
-    title = "ハロプログループの平均年齢", 
+    title = "ハロプログループ・ユニットの平均年齢", 
     subtitle = format(date_val, format = "%Y年%m月%d日時点"), 
     y = "年齢", 
     caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"

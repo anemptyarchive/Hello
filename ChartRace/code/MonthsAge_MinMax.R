@@ -115,7 +115,7 @@ anim <- ggplot(
     stat = "identity", width = 0.9, alpha = 0.8
   ) + # 月齢バー
   geom_text(
-    mapping = aes(y = member_age, label = paste0("  ", age_years, "歳", age_months, "か月")), 
+    mapping = aes(y = member_age, label = paste(" ", age_years, "歳", age_months, "か月")), 
     hjust = 0
   ) + # 月齢ラベル
   geom_text(
@@ -142,8 +142,8 @@ anim <- ggplot(
   labs(
     title = ifelse(
       test = MinMax_flag == "min", 
-      yes  = "ハロプログループの最年少メンバーの月齢の推移", 
-      no   = "ハロプログループの最年長メンバーの月齢の推移"
+      yes  = "ハロプログループ・ユニットの最年少メンバーの月齢の推移", 
+      no   = "ハロプログループ・ユニットの最年長メンバーの月齢の推移"
     ), 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
@@ -158,7 +158,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = (t+s)*n, fps = (t+s)*mps, 
   width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/YearsAge_", MinMax_flag, ".mp4"))
+  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/MonthsAge_", MinMax_flag, ".mp4"))
 )
 
 
@@ -281,8 +281,8 @@ graph <- ggplot(
   labs(
     title = ifelse(
       test = MinMax_flag == "min", 
-      yes  = "ハロプログループの最年少メンバーの年齢", 
-      no   = "ハロプログループの最年長メンバーの年齢"
+      yes  = "ハロプログループ・ユニットの最年少メンバーの年齢", 
+      no   = "ハロプログループ・ユニットの最年長メンバーの年齢"
     ), 
     subtitle = format(date_val, format = "%Y年%m月%d日時点"), 
     y = "年齢", 

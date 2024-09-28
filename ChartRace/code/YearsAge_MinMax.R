@@ -140,8 +140,8 @@ anim <- ggplot(
   labs(
     title = ifelse(
       test = MinMax_flag == "min", 
-      yes  = "ハロプログループの最年少メンバーの年齢の推移", 
-      no   = "ハロプログループの最年長メンバーの年齢の推移"
+      yes  = "ハロプログループ・ユニットの最年少メンバーの年齢の推移", 
+      no   = "ハロプログループ・ユニットの最年長メンバーの年齢の推移"
     ), 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
@@ -264,8 +264,8 @@ graph <- ggplot(
   labs(
     title = ifelse(
       test = MinMax_flag == "min", 
-      yes  = "ハロプログループの最年少メンバーの年齢", 
-      no   = "ハロプログループの最年長メンバーの年齢"
+      yes  = "ハロプログループ・ユニットの最年少メンバーの年齢", 
+      no   = "ハロプログループ・ユニットの最年長メンバーの年齢"
     ), 
     subtitle = format(date_val, format = "%Y年%m月%d日時点"), 
     y = "年齢", 
