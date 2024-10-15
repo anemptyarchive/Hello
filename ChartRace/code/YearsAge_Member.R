@@ -323,7 +323,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
   dplyr::bind_rows(
     outside_df # 加入前月, 卒業翌月
   ) |> 
-  dplyr::arrange(date, birthDate, memberID) |> # 順位付け用
+  dplyr::arrange(date, -member_age, birthDate, memberID) |> # 順位付け用
   dplyr::mutate(
     ranking = dplyr::row_number(), # 順位
     .by = date
