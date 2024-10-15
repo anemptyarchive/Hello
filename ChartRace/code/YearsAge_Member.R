@@ -36,8 +36,9 @@ date_min <- "1997-09-01" |>
 date_max <- "2024-10-01" |> 
   lubridate::as_date() |> 
   lubridate::floor_date(unit = "month") # 集計終了(最大)月
-date_max <- lubridate::today()|> 
-  lubridate::floor_date(unit = "month") # 集計終了(最大)月
+
+
+### グループの設定 -----
 
 # グループを指定
 group_id   <- 1
@@ -130,9 +131,9 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
   dplyr::bind_rows(
     outside_df # 加入前月, 卒業翌月
   ) |> 
-  dplyr::arrange(date, member_age, birthDate) |> # 順位付け用
+  dplyr::arrange(date, -member_age, birthDate, memberID) |> # 順位付け用
   dplyr::mutate(
-    ranking = dplyr::row_number(-member_age), # 順位
+    ranking = dplyr::row_number(), # 順位
     .by = date
   ) |> 
   dplyr::select(date, memberID, memberName, colorCode, member_age, ranking) |> 
@@ -205,7 +206,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = (t+s)*n, fps = (t+s)*mps, 
   width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/YearsAge_Member_", group_id, ".mp4"))
+  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/YearsAge/YearsAge_Member_", group_id, ".mp4"))
 )
 
 
@@ -222,8 +223,9 @@ date_min <- "1997-09-01" |>
 date_max <- "2024-10-01" |> 
   lubridate::as_date() |> 
   lubridate::floor_date(unit = "month") # 集計終了(最大)月
-date_max <- lubridate::today()|> 
-  lubridate::floor_date(unit = "month") # 集計終了(最大)月
+
+
+### グループの設定 -----
 
 # グループを指定
 group_id   <- 1
@@ -321,9 +323,9 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
   dplyr::bind_rows(
     outside_df # 加入前月, 卒業翌月
   ) |> 
-  dplyr::arrange(date, member_age, birthDate) |> # 順位付け用
+  dplyr::arrange(date, birthDate, memberID) |> # 順位付け用
   dplyr::mutate(
-    ranking = dplyr::row_number(-member_age), # 順位
+    ranking = dplyr::row_number(), # 順位
     .by = date
   ) |> 
   dplyr::select(date, memberID, memberName, colorCode, member_age, ranking, add_label) |> 
@@ -396,7 +398,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = (t+s)*n, fps = (t+s)*mps, 
   width = 900, height = 1200, 
-  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/YearsAge_AllMember_", group_id, ".mp4"))
+  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/YearsAge/YearsAge_AllMember_", group_id, ".mp4"))
 )
 
 
@@ -410,8 +412,9 @@ m <- gganimate::animate(
 date_max <- "2024-10-01" |> 
   lubridate::as_date() |> 
   lubridate::floor_date(unit = "month") # 集計終了(最大)月
-date_max <- lubridate::today()|> 
-  lubridate::floor_date(unit = "month") # 集計終了(最大)月
+
+
+### グループの設定 -----
 
 # グループを指定
 group_id   <- 1
@@ -576,7 +579,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = (t+s)*n, fps = (t+s)*mps, 
   width = 900, height = 1200, 
-  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/YearsAge_AllTermMember_", group_id, ".mp4"))
+  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/YearsAge/YearsAge_AllTermMember_", group_id, ".mp4"))
 )
 
 
