@@ -136,8 +136,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     ranking = dplyr::row_number(), # 順位
     .by = date
   ) |> 
-  dplyr::select(date, memberID, memberName, colorCode, member_age, ranking) |> 
-  dplyr::arrange(date, ranking) # 昇順
+  dplyr::select(date, memberID, memberName, colorCode, member_age, ranking)
 rank_df
 
 
@@ -328,8 +327,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     ranking = dplyr::row_number(), # 順位
     .by = date
   ) |> 
-  dplyr::select(date, memberID, memberName, colorCode, member_age, ranking, add_label) |> 
-  dplyr::arrange(date, ranking) # 昇順
+  dplyr::select(date, memberID, memberName, colorCode, member_age, ranking, add_label)
 rank_df
 
 
@@ -467,8 +465,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     ranking = dplyr::row_number(), # 順位
     .by = date
   ) |> 
-  dplyr::select(date, memberID, memberName, colorCode, member_age, ranking, add_label) |> 
-  dplyr::arrange(date, ranking) # 昇順
+  dplyr::select(date, memberID, memberName, colorCode, member_age, ranking, add_label)
 rank_df
 
 

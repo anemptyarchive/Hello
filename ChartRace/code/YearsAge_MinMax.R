@@ -79,13 +79,12 @@ rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解
   dplyr::bind_rows(
     outside_df # 結成前月, 解散翌月
   ) |> 
-  dplyr::arrange(date, member_age, groupID) |> # 順位付け用
+  dplyr::arrange(date, -member_age, groupID) |> # 順位付け用
   dplyr::mutate(
-    ranking = dplyr::row_number(-member_age), # 順位
+    ranking = dplyr::row_number(), # 順位
     .by = date
   ) |> 
-  dplyr::select(date, groupID, groupName, member_age, ranking) |> 
-  dplyr::arrange(date, ranking) # 昇順
+  dplyr::select(date, groupID, groupName, member_age, ranking)
 rank_df
 
 
@@ -106,10 +105,10 @@ n <- length(unique(rank_df[["date"]]))
 # バーチャートレースを作図:(y軸可変)
 anim <- ggplot(
   data = rank_df, 
-  mapping = aes(x = ranking, fill = factor(groupID), color = factor(groupID))
+  mapping = aes(x = ranking, group = factor(groupID))
 ) + 
   geom_bar(
-    mapping = aes(y = member_age), 
+    mapping = aes(y = member_age, fill = factor(groupID), color = factor(groupID)), 
     stat = "identity", width = 0.9, alpha = 0.8
   ) + # 年齢バー
   geom_text(
@@ -156,7 +155,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = (t+s)*n, fps = (t+s)*mps, 
   width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/YearsAge_", MinMax_flag, ".mp4"))
+  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/YearsAge/YearsAge_", MinMax_flag, ".mp4"))
 )
 
 

@@ -78,15 +78,14 @@ rank_df <- group_name_df |> # 活動月, グループ名, 結成(改名)月, 解
   dplyr::bind_rows(
     outside_df # 結成前月, 解散翌月
   ) |> 
-  dplyr::arrange(date, member_period, groupID) |> # 順位付け用
+  dplyr::arrange(date, -member_period, groupID) |> # 順位付け用
   dplyr::mutate(
     period_years  = member_period %/% 12, # グループ最小or最大活動年数
     period_months = member_period %% 12,  # グループ最小or最大活動月数 - 最小or最大活動年数
-    ranking       = dplyr::row_number(-member_period), # 順位
+    ranking       = dplyr::row_number(), # 順位
     .by = date
   ) |> 
-  dplyr::select(date, groupID, groupName, member_period, period_years, period_months, ranking) |> 
-  dplyr::arrange(date, ranking) # 昇順
+  dplyr::select(date, groupID, groupName, member_period, period_years, period_months, ranking)
 rank_df
 
 
@@ -107,10 +106,10 @@ n <- length(unique(rank_df[["date"]]))
 # バーチャートレースを作図:(y軸可変)
 anim <- ggplot(
   data = rank_df, 
-  mapping = aes(x = ranking, fill = factor(groupID), color = factor(groupID))
+  mapping = aes(x = ranking, group = factor(groupID))
 ) + 
   geom_bar(
-    mapping = aes(y = member_period), 
+    mapping = aes(y = member_period, fill = factor(groupID), color = factor(groupID)), 
     stat = "identity", width = 0.9, alpha = 0.8
   ) + # 月数バー
   geom_text(
@@ -157,7 +156,7 @@ m <- gganimate::animate(
   plot = anim, 
   nframes = (t+s)*n, fps = (t+s)*mps, 
   width = 900, height = 600, 
-  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/PeriodJoinHP_", MinMax_flag, ".mp4"))
+  renderer = gganimate::av_renderer(file = paste0("ChartRace/output/PeriodJoinHP/PeriodJoinHP_", MinMax_flag, ".mp4"))
 )
 
 
