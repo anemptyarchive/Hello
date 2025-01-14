@@ -49,9 +49,9 @@ date_max <- group_df |>
   lubridate::floor_date(unit = "month")
 
 
-# 誕生年の分布 -----------------------------------------------------------------
+# 各誕生年のメンバー数 ---------------------------------------------------------
 
-## 誕生年ごとのメンバー数の推移
+## 生まれ年ごとのメンバー数の降順の推移
 
 
 ### データの集計 -----
@@ -195,7 +195,9 @@ s <- 1
 mps <- 3
 
 # フレーム数を取得
-n <- length(unique(rank_df[["date"]]))
+n <- rank_df[["date"]] |> 
+  unique() |> 
+  length()
 
 # ラベルの表示位置を設定
 max_rank <- rank_df |> 
@@ -271,3 +273,143 @@ m <- gganimate::animate(
 )
 
 
+# 誕生年の分布 -----------------------------------------------------------------
+
+## 生まれ年ごとのメンバー数の全体の推移
+
+
+### データの集計 -----
+
+## 「各誕生年のメンバー数」を参照
+
+# メンバー数を集計
+count_df
+
+
+### 演出用データの作成 -----
+
+# 加入前月, 卒業翌月, メンバー数0の年齢のデータを作成:(バーの変化の強調用)
+hist_df <- tidyr::expand_grid(
+  date = seq(
+    from = count_df[["date"]] |> 
+      min() |> 
+      lubridate::rollback() |> 
+      lubridate::floor_date(unit = "month"), # 最小前月
+    to   = count_df[["date"]] |> 
+      max(), # 最大月
+    by = "month"
+  ), # 活動月
+  birth_year = seq(
+    from = count_df[["birth_year"]] |> # 最年長
+      min(), 
+    to   = count_df[["birth_year"]] |> # 最年少
+      max(), 
+    by = 1
+  ) |> 
+    as.integer() # 誕生年
+) |> # 全ての組み合わせを作成
+  dplyr::left_join(
+    count_df, # メンバー数
+    by = c("date", "birth_year")
+  ) |> 
+  dplyr::mutate(
+    member_num = member_num |> 
+      is.na() |> 
+      dplyr::if_else(
+        true  = 0L, 
+        false = member_num
+      ), # 結合時の欠損値を置換
+  ) |> 
+  dplyr::filter(date <= date_max) |> # 集計期間を抽出
+  dplyr::mutate(
+    year_id = birth_year |> 
+      dplyr::dense_rank() # 誕生年ID
+  ) |> 
+  dplyr::select(date, year_id, birth_year, member_num)
+hist_df
+
+
+### アニメーションの作成 -----
+
+# 遷移フレーム数を指定
+t <- 9
+
+# 一時停止フレーム数を指定
+s <- 1
+
+# 1秒間に表示する月数を指定:(値が大きいと意図した通りにならない)
+mps <- 3
+
+# フレーム数を取得
+n <- hist_df[["date"]] |> 
+  unique() |> 
+  length()
+
+# ラベルの表示位置を設定
+max_num <- hist_df |> 
+  dplyr::pull(member_num) |> 
+  max()
+max_year <- hist_df |> 
+  dplyr::pull(birth_year) |> 
+  max()
+
+# バーチャートレースを作図
+anim <- ggplot() + 
+  geom_bar(
+    data    = hist_df, 
+    mapping = aes(
+      x = birth_year, y = member_num, group = factor(year_id), 
+      fill = factor(year_id), color = factor(year_id)
+    ), 
+    stat = "identity", width = 0.9, alpha = 0.8
+  ) + # メンバー数バー
+  geom_text(
+    data    = hist_df, 
+    mapping = aes(
+      x = birth_year, y = 0, group = factor(year_id), 
+      label = paste(" ", member_num, "人")
+    ), 
+    hjust = 0
+  ) + # メンバー数ラベル
+  geom_text(
+    data    = hist_df, 
+    mapping = aes(
+      x = birth_year, y = 0, group = factor(year_id), 
+      label = paste(" ", birth_year, "年生まれ  ") # (なぜか文頭にスペースを入れると表示がバグらない)
+    ), 
+    hjust = 1
+  ) + # 誕生年ラベル
+  gganimate::transition_states(states = date, transition_length = t, state_length = s, wrap = FALSE) + # フレーム切替
+  gganimate::ease_aes("cubic-in-out") + # アニメーションの緩急
+  coord_flip(clip = "off", expand = FALSE) + # 軸の入替
+  scale_x_reverse(breaks = sort(unique(hist_df[["member_age"]]))) + 
+  theme(
+    axis.title = element_blank(), # 軸ラベル
+    axis.text  = element_blank(), # 軸目盛ラベル
+    axis.ticks = element_blank(), # 軸目盛指示線
+    panel.grid.minor.y = element_blank(), # y軸補助目盛線
+    panel.border       = element_blank(), # グラフ領域の枠線
+    plot.title    = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 図タイトル
+    plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 図サブタイトル
+    plot.margin   = margin(t = 10, r = 60, b = 10, l = 120, unit = "pt"), # 図の余白
+    legend.position = "none" # 凡例の位置
+  ) + 
+  labs(
+    title = paste0(group_name, "メンバーの誕生年の推移"), 
+    subtitle = paste0(
+      "{lubridate::year(closest_state)}年", 
+      "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)}月", 
+      "01日時点"
+    )#, 
+    #caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
+  )
+
+# 動画を作成
+tmp_id <- paste0(group_id, collapse = "-") # (複数グループ用)
+file_path <- paste0("ChartRace/output/YearOfBirth_MemberNum/YearOfBirth_hist_", tmp_id, ".mp4")
+m <- gganimate::animate(
+  plot = anim, 
+  nframes = (t+s)*n, fps = (t+s)*mps, 
+  width = 900, height = 450, 
+  renderer = gganimate::av_renderer(file = file_path)
+)

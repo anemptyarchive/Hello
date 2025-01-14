@@ -49,9 +49,9 @@ date_max <- group_df |>
   lubridate::floor_date(unit = "month")
 
 
-# 年齢の分布 -------------------------------------------------------------------
+# 各年齢のメンバー数 -----------------------------------------------------------
 
-## 年齢ごとのメンバー数の推移
+## 年齢ごとのメンバー数の降順の推移
 
 
 ### データの集計 -----
@@ -307,52 +307,14 @@ m <- gganimate::animate(
 
 # 年齢の分布 -------------------------------------------------------------------
 
-## 年齢ごとのメンバー数の推移
+## 年齢ごとのメンバー数の全体の推移
 
 
 ### データの集計 -----
 
+## 「各年齢のメンバー数」を参照
+
 # メンバー数を集計
-count_df <- join_df |> # メンバーID, 加入日, 卒業日
-  dplyr::filter(groupID %in% group_id) |> # グループを抽出
-  dplyr::mutate(
-    gradDate = gradDate |> 
-      is.na() |> 
-      dplyr::if_else(
-        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or最大月
-        false = gradDate # 卒業日
-      )
-  ) |> 
-  dplyr::left_join(
-    member_df |> # メンバー名, 生年月日
-      dplyr::select(memberID, memberName, birthDate) |> 
-      dplyr::distinct(memberID, .keep_all = TRUE), # 重複を除去
-    by = "memberID"
-  ) |> 
-  dplyr::mutate(
-    date_from = (lubridate::day(joinDate) == 1) |> 
-      dplyr::if_else(
-        true  = joinDate, # 加入月
-        false = joinDate |> 
-          lubridate::rollforward(roll_to_first = TRUE) # 加入日が月初でないなら加入翌月
-      ), 
-    date_to   = gradDate |> 
-      lubridate::floor_date(unit = "month") # 卒業月
-  ) |> 
-  dplyr::reframe(
-    date = seq(from = date_from, to = date_to, by = "month"), # 活動月
-    .by = c(memberID, groupID, birthDate)
-  ) |> 
-  dplyr::mutate(
-    member_age = lubridate::interval(start = birthDate, end = date) |> 
-      lubridate::time_length(unit = "year") |> 
-      floor() # メンバー年齢
-  ) |> 
-  dplyr::summarise(
-    member_num = dplyr::n(), # 年齢メンバー数
-    .by = c(date, member_age)
-  ) |> 
-  dplyr::select(date, member_age, member_num)
 count_df
 
 
