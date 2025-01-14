@@ -1,5 +1,5 @@
 
-# 任意のグループの生まれ年ごとのメンバー数の推移 -------------------------------
+# 任意のグループの生まれ年度ごとのメンバー数の推移 -----------------------------
 
 # 利用パッケージ
 library(tidyverse)
@@ -49,9 +49,9 @@ date_max <- group_df |>
   lubridate::floor_date(unit = "month")
 
 
-# 誕生年の分布 -----------------------------------------------------------------
+# 誕生年度の分布 ---------------------------------------------------------------
 
-## 誕生年ごとのメンバー数の推移
+## 誕生年度ごとのメンバー数の推移
 
 
 ### データの集計 -----
@@ -84,14 +84,19 @@ count_df <- join_df |> # メンバーID, 加入日, 卒業日
       lubridate::floor_date(unit = "month"), # 卒業月
     birth_year = birthDate |> 
       lubridate::year() |> 
-      as.integer() # メンバー誕生年
+      as.integer(), # メンバー誕生年
+    birth_year = (lubridate::month(birthDate) <= 3) |> 
+      dplyr::if_else(
+        true  = birth_year - 1, # 早生まれなら誕生年度
+        false = birth_year      # 誕生年
+      )
   ) |> 
   dplyr::reframe(
     date = seq(from = date_from, to = date_to, by = "month"), # 活動月
     .by = c(memberID, groupID, birth_year)
   ) |> 
   dplyr::summarise(
-    member_num = dplyr::n(), # 誕生年メンバー数
+    member_num = dplyr::n(), # 誕生年度メンバー数
     .by = c(date, birth_year)
   ) |> 
   dplyr::select(date, birth_year, member_num)
@@ -113,7 +118,7 @@ outside_df <- tidyr::expand_grid(
   ), # 活動月
   birth_year = count_df[["birth_year"]] |> 
     unique() |> 
-    sort() # 誕生年
+    sort() # 誕生年度
 ) |> # 全ての組み合わせを作成
   dplyr::left_join(
     count_df, # メンバー数
@@ -152,8 +157,7 @@ rank_df <- count_df |>
   dplyr::filter(date <= date_max) |> # 集計期間を抽出
   dplyr::mutate(
     year_id = birth_year |> 
-      dplyr::dense_rank() # 誕生年ID
-    
+      dplyr::dense_rank() # 誕生年度ID
   ) |> 
   dplyr::arrange(date, -member_num, birth_year) |> # 順位付け用
   dplyr::mutate(
@@ -229,10 +233,10 @@ anim <- ggplot() +
     data    = rank_df, 
     mapping = aes(
       x = ranking, y = 0, group = factor(year_id), 
-      label = paste(" ", birth_year, "年生まれ  ") # (なぜか文頭にスペースを入れると表示がバグらない)
+      label = paste(" ", birth_year, "年度生まれ  ") # (なぜか文頭にスペースを入れると表示がバグらない)
     ), 
     hjust = 1
-  ) + # 誕生年ラベル
+  ) + # 誕生年度ラベル
   gganimate::transition_states(states = date, transition_length = t, state_length = s, wrap = FALSE) + # フレーム切替
   gganimate::ease_aes("cubic-in-out") + # アニメーションの緩急
   gganimate::view_follow(fixed_x = TRUE) + # 表示範囲の可変
@@ -251,7 +255,7 @@ anim <- ggplot() +
     legend.position = "none" # 凡例の位置
   ) + 
   labs(
-    title = paste0(group_name, "メンバーの誕生年の推移"), 
+    title = paste0(group_name, "メンバーの誕生年度の推移"), 
     subtitle = paste0(
       "{lubridate::year(closest_state)}年", 
       "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)}月", 
@@ -262,7 +266,7 @@ anim <- ggplot() +
 
 # 動画を作成
 tmp_id <- paste0(group_id, collapse = "-") # (複数グループ用)
-file_path <- paste0("ChartRace/output/YearOfBirth_MemberNum/YearOfBirth_", tmp_id, ".mp4")
+file_path <- paste0("ChartRace/output/FiscalYearOfBirth_MemberNum/FiscalYearOfBirth_", tmp_id, ".mp4")
 m <- gganimate::animate(
   plot = anim, 
   nframes = (t+s)*n, fps = (t+s)*mps, 
