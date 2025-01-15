@@ -300,10 +300,10 @@ hist_df <- tidyr::expand_grid(
     by = "month"
   ), # 活動月
   birth_year = seq(
-    from = count_df[["birth_year"]] |> # 最年長
-      min(), 
-    to   = count_df[["birth_year"]] |> # 最年少
-      max(), 
+    from = count_df[["birth_year"]] |> 
+      min(), # 最年長
+    to   = count_df[["birth_year"]] |> 
+      max(), # 最年少
     by = 1
   ) |> 
     as.integer() # 誕生年
@@ -382,7 +382,7 @@ anim <- ggplot() +
   gganimate::transition_states(states = date, transition_length = t, state_length = s, wrap = FALSE) + # フレーム切替
   gganimate::ease_aes("cubic-in-out") + # アニメーションの緩急
   coord_flip(clip = "off", expand = FALSE) + # 軸の入替
-  scale_x_reverse(breaks = sort(unique(hist_df[["member_age"]]))) + 
+  scale_x_reverse(breaks = sort(unique(hist_df[["birth_year"]]))) + # 誕生年軸を反転
   theme(
     axis.title = element_blank(), # 軸ラベル
     axis.text  = element_blank(), # 軸目盛ラベル
@@ -391,7 +391,7 @@ anim <- ggplot() +
     panel.border       = element_blank(), # グラフ領域の枠線
     plot.title    = element_text(color = "black", face = "bold", size = 20, hjust = 0.5), # 図タイトル
     plot.subtitle = element_text(color = "black", size = 15, hjust = 0.5), # 図サブタイトル
-    plot.margin   = margin(t = 10, r = 60, b = 10, l = 120, unit = "pt"), # 図の余白
+    plot.margin   = margin(t = 10, r = 10, b = 10, l = 100, unit = "pt"), # 図の余白
     legend.position = "none" # 凡例の位置
   ) + 
   labs(
@@ -413,3 +413,5 @@ m <- gganimate::animate(
   width = 900, height = 450, 
   renderer = gganimate::av_renderer(file = file_path)
 )
+
+
