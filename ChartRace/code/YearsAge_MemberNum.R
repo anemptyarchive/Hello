@@ -223,7 +223,9 @@ s <- 1
 mps <- 3
 
 # フレーム数を取得
-n <- length(unique(rank_df[["date"]]))
+n <- rank_df[["date"]] |> 
+  unique() |> 
+  length()
 
 # ラベルの表示位置を設定
 max_rank <- rank_df |> 
@@ -331,9 +333,14 @@ hist_df <- tidyr::expand_grid(
       max(), # 最大月
     by = "month"
   ), # 活動月
-  member_age = count_df[["member_age"]] |> 
-    unique() |> 
-    sort() # 年齢
+  member_age = seq(
+    from = count_df[["member_age"]] |> 
+      min(), # 最年少
+    to   = count_df[["member_age"]] |> 
+      max(), # 最年長
+    by = 1
+  ) |> 
+    as.integer() # 年齢
 ) |> # 全ての組み合わせを作成
   dplyr::left_join(
     count_df, # メンバー数
@@ -343,7 +350,7 @@ hist_df <- tidyr::expand_grid(
     member_num = member_num |> 
       is.na() |> 
       dplyr::if_else(
-        true  = 0, 
+        true  = 0L, 
         false = member_num
       ), # 結合時の欠損値を置換
   ) |> 
@@ -389,7 +396,9 @@ s <- 1
 mps <- 3
 
 # フレーム数を取得
-n <- length(unique(hist_df[["date"]]))
+n <- hist_df[["date"]] |> 
+  unique() |> 
+  length()
 
 # ラベルの表示位置を設定
 max_num <- hist_df |> 
