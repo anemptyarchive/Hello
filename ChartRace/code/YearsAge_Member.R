@@ -20,6 +20,7 @@ library(ggplot2)
 # 利用データを確認
 join_df   # 加入・卒業日一覧
 member_df # メンバー一覧
+color_df  # メンバーカラー一覧
 
 
 # 集計の設定 -------------------------------------------------------------------
@@ -27,16 +28,16 @@ member_df # メンバー一覧
 ### グループの設定 -----
 
 # グループを指定:(複数の場合はベクトル)
-group_id <- 1
+group_id <- 5
 
 # タイトル用の文字列を指定
-group_name <- "モーニング娘。"
+group_name <- "カントリー娘。"
 
 
 ### 期間の設定 -----
 
 # 集計終了(最大)月を指定
-date_max <- "2024-12-01" |> # 任意の日
+date_max <- "2007-02-01" |> # 任意の日
   lubridate::as_date() |> 
   lubridate::floor_date(unit = "month")
 date_max <- lubridate::today() |> # 集計日
@@ -44,8 +45,10 @@ date_max <- lubridate::today() |> # 集計日
 date_max <- group_df |> 
   dplyr::filter(groupID %in% group_id) |> 
   dplyr::pull(dissolveDate) |> 
-  (\(val) {max(val, lubridate::today(), na.rm = TRUE)})() |> # 解散日or集計日
+  max() |> 
+  (\(val) {min(val, lubridate::today(), na.rm = TRUE)})() |> # 解散日or集計日
   lubridate::floor_date(unit = "month")
+date_max
 
 
 # 現役メンバーの年齢 -----------------------------------------------------------
@@ -83,10 +86,12 @@ outside_df <- join_df |>
   ) |> 
   dplyr::mutate(
     memberName = " ", 
-    member_age = 0
-  ) |> # 疑似集計データを追加
-  dplyr::select(date, memberID, memberName, colorCode, member_age) |> 
-  dplyr::arrange(memberID, date) # 昇順
+    member_age = 0, 
+    age_label  = "  0 歳", 
+    dummy_flag = TRUE # メンバー数の集計用
+  ) |> # 疑似データを追加
+  dplyr::select(date, memberID, memberName, colorCode, member_age, age_label, dummy_flag) |> 
+  dplyr::arrange(memberID, date)
 outside_df
 
 
@@ -126,12 +131,24 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
   ) |> 
   dplyr::reframe(
     date = seq(from = date_from, to = date_to, by = "month"), # 活動月
-    .by = c(memberID, groupID, joinDate, gradDate, memberName, birthDate, colorCode)
+    .by = c(memberID, groupID, memberName, colorCode, birthDate)
   ) |> 
   dplyr::mutate(
-    member_age = lubridate::interval(start = birthDate, end = date) |> 
-      lubridate::time_length(unit = "year") |> 
-      floor() # メンバー年齢
+    member_age = birthDate |> 
+      is.na() |> 
+      dplyr::if_else(
+        true  = 0, # 生年月日非公開メンバー用
+        false = lubridate::interval(start = birthDate, end = date) |> 
+          lubridate::time_length(unit = "year") |> 
+          floor()  # メンバー年齢
+      ), 
+    age_label = birthDate |> 
+      is.na() |> 
+      dplyr::if_else(
+        true  = "  NA 歳", # 生年月日非公開メンバー用
+        false = paste(" ", member_age, "歳") # 年齢ラベル
+      ), 
+    dummy_flag = FALSE # メンバー数の集計用
   ) |> 
   dplyr::bind_rows(
     outside_df # 加入前月, 卒業翌月
@@ -142,7 +159,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     ranking = dplyr::row_number(), # 順位
     .by = date
   ) |> 
-  dplyr::select(date, memberID, memberName, colorCode, birthDate, member_age, ranking)
+  dplyr::select(date, memberID, memberName, colorCode, birthDate, member_age, ranking, age_label, dummy_flag)
 rank_df
 
 
@@ -160,7 +177,8 @@ dummy_df <- rank_df |>
   dplyr::filter(tmp_sum == 0) |> # 全ての値が0の月を抽出
   dplyr::mutate(
     dummy_y = dummy_val # (初期表示範囲の調整用)
-  )
+  ) |> 
+  dplyr::select(date, dummy_y)
 dummy_df
 
 # 平均年齢を集計
@@ -168,27 +186,29 @@ mean_df <- rank_df |>
   dplyr::summarise(
     max_age    = max(member_age, na.rm = TRUE), # (生年月日非公開を除く)グループ最大年齢
     totla_age  = sum(member_age, na.rm = TRUE), # (生年月日非公開を除く)グループ合計年齢
-    member_num = sum(!is.na(birthDate)),        # (生年月日非公開を除く)グループメンバー数
+    tmp_num    = sum(!is.na(birthDate)),        # (生年月日非公開を除く)グループメンバー数
+    member_num = sum(dummy_flag == FALSE), # グループメンバー数
     .by = date
-  ) |> 
+  ) |> # (疑似データを除いて計算)
   dplyr::mutate(
-    mean_age = totla_age / member_num, # グループ平均年齢
-    mean_age = mean_age |> 
-      is.na() |> 
-      dplyr::if_else(
-        true  = 0, 
-        false = mean_age
-      ), 
-    label = paste(
-      "メンバー数:", member_num, "人\n", 
-      "平均年齢:", round(mean_age, digits = 1), "歳"
-    ), 
     max_age = (max_age == 0) |> 
       dplyr::if_else(
         true  = dummy_val, 
         false = max_age
-      ) # (初期表示範囲の調整用)
-  )
+      ), # (初期表示範囲の調整用)
+    mean_age = totla_age / tmp_num, # グループ平均年齢
+    mean_age = mean_age |> 
+      is.na() |> 
+      dplyr::if_else(
+        true  = 0, # 全て疑似データor生年月日非公開メンバーなら0に置換
+        false = mean_age
+      ), 
+    mean_label = paste(
+      "メンバー数:", member_num, "人\n", 
+      "平均年齢:", round(mean_age, digits = 1), "歳"
+    )
+  ) |> 
+  dplyr::select(date, max_age, mean_age, mean_label)
 mean_df
 
 
@@ -204,7 +224,9 @@ s <- 1
 mps <- 3
 
 # フレーム数を取得
-n <- length(unique(rank_df[["date"]]))
+n <- rank_df[["date"]] |> 
+  unique() |> 
+  length()
 
 # ラベルの表示位置を設定
 max_rank <- rank_df |> 
@@ -225,7 +247,7 @@ anim <- ggplot() +
   ) + # 平均年齢線
   geom_label(
     data    = mean_df, 
-    mapping = aes(x = max_rank+0.5, y = max_age, label = label), 
+    mapping = aes(x = max_rank+0.5, y = max_age, label = mean_label), 
     hjust = 1, vjust = 0, color = "black", fill = "white", 
     size = 4
   ) + # 平均年齢ラベル
@@ -241,7 +263,7 @@ anim <- ggplot() +
     data    = rank_df, 
     mapping = aes(
       x = ranking, y = member_age, group = factor(memberID), 
-      label = paste(" ", member_age, "歳")
+      label = age_label
       ), 
     hjust = 0
   ) + # 年齢ラベル
@@ -275,11 +297,11 @@ anim <- ggplot() +
   labs(
     title = paste0(group_name, "メンバーの年齢の推移"), 
     subtitle = paste0(
-      "{lubridate::year(closest_state)} 年 ", 
-      "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)} 月 ", 
-      "01 日時点"
-    )#, 
-    #caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
+      "{lubridate::year(closest_state)}年", 
+      "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)}月", 
+      "01日時点"
+    ), 
+    caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
   )
 
 # 動画を作成
@@ -322,9 +344,9 @@ outside_df <- join_df |>
     memberName = " ", 
     member_age = 0, 
     add_label  = ""
-  ) |> # 疑似集計データを追加
+  ) |> # 疑似データを追加
   dplyr::select(date, memberID, memberName, colorCode, member_age, add_label) |> 
-  dplyr::arrange(memberID, date) # 昇順
+  dplyr::arrange(memberID, date)
 outside_df
 
 
@@ -392,7 +414,9 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     ranking = dplyr::row_number(), # 順位
     .by = date
   ) |> 
-  dplyr::select(date, memberID, memberName, colorCode, birthDate, member_age, ranking, add_label)
+  dplyr::select(
+    date, memberID, memberName, colorCode, birthDate, member_age, ranking, add_label
+  )
 rank_df
 
 
@@ -426,7 +450,9 @@ s <- 1
 mps <- 3
 
 # フレーム数を取得
-n <- length(unique(rank_df[["date"]]))
+n <- rank_df[["date"]] |> 
+  unique() |> 
+  length()
 
 # バーチャートレースを作図
 anim <- ggplot() + 
@@ -481,9 +507,9 @@ anim <- ggplot() +
   labs(
     title = paste0(group_name, "歴代メンバーの在籍時の年齢の推移"), 
     subtitle = paste0(
-      "{lubridate::year(closest_state)} 年 ", 
-      "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)} 月 ", 
-      "01 日時点"
+      "{lubridate::year(closest_state)}年", 
+      "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)}月", 
+      "01日時点"
     )#, 
     #caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
   )
@@ -609,7 +635,9 @@ s <- 1
 mps <- 3
 
 # フレーム数を取得
-n <- length(unique(rank_df[["date"]]))
+n <- rank_df[["date"]] |> 
+  unique() |> 
+  length()
 
 # バーチャートレースを作図
 anim <- ggplot() + 
@@ -662,9 +690,9 @@ anim <- ggplot() +
   labs(
     title = paste0(group_name, "歴代メンバーの年齢の推移"), 
     subtitle = paste0(
-      "{lubridate::year(closest_state)} 年 ", 
-      "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)} 月 ", 
-      "01 日時点"
+      "{lubridate::year(closest_state)}年", 
+      "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)}月", 
+      "01日時点"
     )#, 
     #caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
   )
