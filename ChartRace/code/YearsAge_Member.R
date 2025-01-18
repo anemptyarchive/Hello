@@ -104,7 +104,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     gradDate = gradDate |> 
       is.na() |> 
       dplyr::if_else(
-        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or最大月
+        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or将来月
         false = gradDate
       )
   ) |> 
@@ -181,11 +181,11 @@ dummy_df <- rank_df |>
   dplyr::select(date, dummy_y)
 dummy_df
 
-# 平均年齢を集計
+# 現役メンバーの平均年齢を集計
 mean_df <- rank_df |> 
   dplyr::summarise(
     max_age    = max(member_age, na.rm = TRUE), # (生年月日非公開を除く)グループ最大年齢
-    totla_age  = sum(member_age, na.rm = TRUE), # (生年月日非公開を除く)グループ合計年齢
+    total_age  = sum(member_age, na.rm = TRUE), # (生年月日非公開を除く)グループ合計年齢
     tmp_num    = sum(!is.na(birthDate)),        # (生年月日非公開を除く)グループメンバー数
     member_num = sum(dummy_flag == FALSE), # グループメンバー数
     .by = date
@@ -196,7 +196,7 @@ mean_df <- rank_df |>
         true  = dummy_val, 
         false = max_age
       ), # (初期表示範囲の調整用)
-    mean_age = totla_age / tmp_num, # グループ平均年齢
+    mean_age = total_age / tmp_num, # グループ平均年齢
     mean_age = mean_age |> 
       is.na() |> 
       dplyr::if_else(
@@ -343,9 +343,11 @@ outside_df <- join_df |>
   dplyr::mutate(
     memberName = " ", 
     member_age = 0, 
-    add_label  = ""
+    age_label  = "  0 歳", 
+    add_label  = "", 
+    dummy_flag = TRUE # メンバー数の集計用
   ) |> # 疑似データを追加
-  dplyr::select(date, memberID, memberName, colorCode, member_age, add_label) |> 
+  dplyr::select(date, memberID, memberName, colorCode, member_age, age_label, add_label, dummy_flag) |> 
   dplyr::arrange(memberID, date)
 outside_df
 
@@ -359,7 +361,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     gradDate = gradDate |> 
       is.na() |> 
       dplyr::if_else(
-        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or最大月
+        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or将来月
         false = gradDate
       )
   ) |> 
@@ -384,26 +386,39 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     date_to = date_max |> 
       lubridate::floor_date(unit = "month") # 集計最大月
   ) |> 
+  dplyr::filter(date_from <= date_to) |> # 未加入メンバーを除去(エラー回避用)
   dplyr::reframe(
     date = seq(from = date_from, to = date_to, by = "month"), # 活動・卒業後月
-    .by = c(memberID, groupID, joinDate, gradDate, memberName, birthDate, colorCode)
+    .by = c(memberID, groupID, memberName, colorCode, joinDate, gradDate, birthDate)
   ) |> 
   dplyr::mutate(
-    member_age = lubridate::interval(
-      start = birthDate, 
-      end   = (date <= gradDate) |> 
-        dplyr::if_else(
-          true  = date,    # 集計日
-          false = gradDate # 卒業日
-        )
-    ) |> 
-      lubridate::time_length(unit = "year") |> 
-      floor(), # メンバー年齢
+    member_age = birthDate |> 
+      is.na() |> 
+      dplyr::if_else(
+        true  = 0, # 生年月日非公開メンバー用
+        false = lubridate::interval(
+          start = birthDate, 
+          end   = (date <= gradDate) |> 
+            dplyr::if_else(
+              true  = date,    # 集計日
+              false = gradDate # 卒業日
+            )
+        ) |> 
+          lubridate::time_length(unit = "year") |> 
+          floor() # メンバー年齢
+      ), 
+    age_label = birthDate |> 
+      is.na() |> 
+      dplyr::if_else(
+        true  = "  NA 歳", # 生年月日非公開メンバー用
+        false = paste(" ", member_age, "歳") # 年齢ラベル
+      ), 
     add_label = (date <= gradDate) |> 
       dplyr::if_else(
         true  = "(現)", # 現役ラベル
         false = "(卒)"  # 卒業ラベル
-      )
+      ), 
+    dummy_flag = FALSE # メンバー数の集計用
   ) |> 
   dplyr::bind_rows(
     outside_df # 加入前月, 卒業翌月
@@ -415,7 +430,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     .by = date
   ) |> 
   dplyr::select(
-    date, memberID, memberName, colorCode, birthDate, member_age, ranking, add_label
+    date, memberID, memberName, colorCode, birthDate, member_age, ranking, age_label, add_label, dummy_flag
   )
 rank_df
 
@@ -434,8 +449,58 @@ dummy_df <- rank_df |>
   dplyr::filter(tmp_sum == 0) |> # 全ての値が0の月を抽出
   dplyr::mutate(
     dummy_y = dummy_val # (初期表示範囲の調整用)
-  )
+  )|> 
+  dplyr::select(date, dummy_y)
 dummy_df
+
+# 卒業メンバーの平均年齢を集計
+mean_df <- rank_df |> 
+  dplyr::summarise(
+    max_age    = max(member_age, na.rm = TRUE), # (生年月日非公開を除く)グループ最大年齢
+    .by = date
+  ) |> # (疑似データを除いて計算)
+  dplyr::left_join(
+    rank_df |> 
+      dplyr::filter(add_label == "(卒)") |> # 卒業メンバーを抽出
+      dplyr::summarise(
+        total_age  = sum(member_age, na.rm = TRUE), # (生年月日非公開を除く)卒業メンバー合計年齢
+        tmp_num    = sum(!is.na(birthDate)),        # (生年月日非公開を除く)卒業メンバーメンバー数
+        member_num = dplyr::n(), # 卒業メンバー数
+        .by = date
+      ), 
+    by = "date"
+  ) |> 
+  dplyr::mutate(
+    total_age  = total_age |> 
+      is.na() |> 
+      dplyr::if_else(true = 0, false = total_age), 
+    tmp_num    = tmp_num |> 
+      is.na() |> 
+      dplyr::if_else(true = 0, false = tmp_num), 
+    member_num = member_num |> 
+      is.na() |> 
+      dplyr::if_else(true = 0, false = member_num), 
+  ) |> 
+  dplyr::mutate(
+    max_age = (max_age == 0) |> 
+      dplyr::if_else(
+        true  = dummy_val, 
+        false = max_age
+      ), # (初期表示範囲の調整用)
+    mean_age = total_age / tmp_num, # 卒業メンバー平均年齢
+    mean_age = mean_age |> 
+      is.na() |> 
+      dplyr::if_else(
+        true  = 0, # 全て疑似データor生年月日非公開メンバーなら0に置換
+        false = mean_age
+      ), 
+    mean_label = paste(
+      "卒業メンバー数:", member_num, "人\n", 
+      "平均卒業年齢:", round(mean_age, digits = 1), "歳"
+    )
+  ) |> 
+  dplyr::select(date, max_age, mean_age, mean_label)
+mean_df
 
 
 ### アニメーションの作成 -----
@@ -454,6 +519,11 @@ n <- rank_df[["date"]] |>
   unique() |> 
   length()
 
+# ラベルの表示位置を設定
+max_rank <- rank_df |> 
+  dplyr::pull(ranking) |> 
+  max()
+
 # バーチャートレースを作図
 anim <- ggplot() + 
   geom_point(
@@ -461,6 +531,17 @@ anim <- ggplot() +
     mapping = aes(x = max_rank+0.5, y = dummy_y), 
     color = "grey90", size = 0
   ) + # (初期表示範囲の調整用)
+  geom_hline(
+    data    = mean_df, 
+    mapping = aes(yintercept = mean_age), 
+    color = "black", linetype = "dashed"
+  ) + # 平均年齢線
+  geom_label(
+    data    = mean_df, 
+    mapping = aes(x = max_rank+0.5, y = max_age, label = mean_label), 
+    hjust = 1, vjust = 0, color = "black", fill = "white", 
+    size = 4
+  ) + # 平均年齢ラベル
   geom_bar(
     data    = rank_df, 
     mapping = aes(
@@ -473,7 +554,7 @@ anim <- ggplot() +
     data    = rank_df, 
     mapping = aes(
       x = ranking, y = member_age, group = factor(memberID), 
-      label = paste(" ", member_age, "歳", add_label)
+      label = paste(age_label, add_label)
     ), 
     hjust = 0
   ) + # 年齢ラベル
