@@ -131,7 +131,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
   ) |> 
   dplyr::reframe(
     date = seq(from = date_from, to = date_to, by = "month"), # 活動月
-    .by = c(memberID, groupID, memberName, colorCode, birthDate)
+    .by = c(memberID, memberName, colorCode, birthDate)
   ) |> 
   dplyr::mutate(
     member_age = birthDate |> 
@@ -389,7 +389,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
   dplyr::filter(date_from <= date_to) |> # 未加入メンバーを除去(エラー回避用)
   dplyr::reframe(
     date = seq(from = date_from, to = date_to, by = "month"), # 活動・卒業後月
-    .by = c(memberID, groupID, memberName, colorCode, joinDate, gradDate, birthDate)
+    .by = c(memberID, memberName, colorCode, joinDate, gradDate, birthDate)
   ) |> 
   dplyr::mutate(
     member_age = birthDate |> 
@@ -620,7 +620,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     gradDate = gradDate |> 
       is.na() |> 
       dplyr::if_else(
-        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or最大月
+        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or将来月
         false = gradDate
       ), 
     date_from = (lubridate::day(joinDate) == 1) |> 
@@ -645,19 +645,24 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     by = c("groupID", "memberID")
   ) |> 
   dplyr::reframe(
-    date = seq(from = date_from, to = date_max, by = "month"), # (グループ)活動月
-    .by = dplyr::everything()
+    date = seq(from = date_from, to = date_max, by = "month"), # グループ活動月
+    .by = c(memberID, memberName, colorCode, joinDate, gradDate, birthDate)
   ) |> 
   dplyr::mutate(
-    member_age = lubridate::interval(start = birthDate, end = date) |> 
-      lubridate::time_length(unit = "year") |> 
-      floor(), # メンバー年齢
+    member_age = birthDate |> 
+      is.na() |> 
+      dplyr::if_else(
+        true  = 0, # 生年月日非公開メンバー用
+        false = lubridate::interval(start = birthDate, end = date) |> 
+          lubridate::time_length(unit = "year") |> 
+          floor()  # メンバー年齢
+      ), 
     add_label = dplyr::case_when(
       date < joinDate ~ "(未)", # 未加入ラベル
       date > gradDate ~ "(卒)", # 卒業ラベル
       .default        = "(現)"  # 現役ラベル
     ) |> 
-      factor(levels = c("(卒)", "(現)", "(未)"))
+      factor(levels = c("(卒)", "(現)", "(未)")) # 表示順を指定
   ) |> 
   dplyr::arrange(date, add_label, birthDate, memberID) |> # 順位付け用
   dplyr::mutate(
@@ -688,19 +693,27 @@ border_df
 # ラベルを作成
 label_df <- rank_df |> 
   dplyr::mutate(
-    birth_flag = member_age >= 0, # 誕生フラグ
-    name_label = birth_flag |> 
+    born_flag  = member_age >= 0, # 誕生フラグ
+    name_label = born_flag |> 
       dplyr::if_else(
         true  = paste(memberName, " "), 
         false = paste(" ", memberName)
       ), # メンバー名ラベル
-    age_label = birth_flag |> 
+    tmp_age   = birthDate |> 
+      is.na() |> 
       dplyr::if_else(
-        true  = paste(" ", member_age, "歳", add_label), 
-        false = paste(member_age, "歳 ")
+        true  = NA, # 生年月日非公開メンバー用
+        false = member_age
+      ), 
+    age_label = born_flag |> 
+      dplyr::if_else(
+        true  = paste(" ", tmp_age, "歳", add_label), 
+        false = paste(tmp_age, "歳 ")
       ) # 年齢ラベル
   ) |> 
-  dplyr::select(date, memberID, memberName, member_age, ranking, birth_flag, name_label, age_label)
+  dplyr::select(
+    date, memberID, memberName, member_age, ranking, name_label, age_label, born_flag
+  )
 label_df
 
 
@@ -739,14 +752,14 @@ anim <- ggplot() +
     data    = label_df, 
     mapping = aes(
       x = ranking, y = member_age, group = factor(memberID), 
-      label = age_label, hjust = as.integer(!birth_flag)
+      label = age_label, hjust = as.integer(!born_flag)
     )
   ) + # 年齢ラベル
   geom_text(
     data    = label_df, 
     mapping = aes(
       x = ranking, y = 0, group = factor(memberID), 
-      label = name_label, hjust = as.integer(birth_flag)
+      label = name_label, hjust = as.integer(born_flag)
     )
   ) + # メンバー名ラベル
   gganimate::transition_states(states = date, transition_length = t, state_length = s, wrap = FALSE) + # フレーム切替
