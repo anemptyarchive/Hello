@@ -524,7 +524,7 @@ anim <- ggplot() +
     data    = label_df, 
     mapping = aes(x = max_rank+0.5, y = max_age, label = num_label), 
     hjust = 1, vjust = 0, color = "black", fill = "white", 
-    halign = 0, valign = 0.5, width = unit(1.5, units = "inch"), 
+    halign = 0, valign = 0.5, width = unit(1.6, units = "inch"), 
     size = 4
   ) + # メンバー数ラベル
   geom_bar(
