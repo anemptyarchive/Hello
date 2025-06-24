@@ -1,11 +1,12 @@
 
-# グループメンバーごとのグループ加入月数(活動歴)の推移 -------------------------
+# 任意のグループのメンバーごとのグループ加入歴(年月数)の推移 -------------------
 
 # 利用パッケージ
 library(tidyverse)
 library(gganimate)
+library(ggtext)
 
-# パッケージを読込
+# パッケージ名の省略用
 library(ggplot2)
 
 
@@ -20,6 +21,7 @@ library(ggplot2)
 # 利用データを確認
 join_df   # 加入・卒業日一覧
 member_df # メンバー一覧
+color_df  # メンバーカラー一覧
 
 
 # 集計の設定 -------------------------------------------------------------------
@@ -30,14 +32,13 @@ member_df # メンバー一覧
 group_id <- 2
 
 # タイトル用の文字列を指定
-group_name <- "モーニング娘。"
 group_name <- "私立恵比寿中学"
 
 
 ### 期間の設定 -----
 
-# 集計終了(最大)月
-date_max <- "2024-12-01" |> # 任意の日
+# 集計終了月
+date_max <- "2025-07-01" |> # 任意の日
   lubridate::as_date() |> 
   lubridate::floor_date(unit = "month")
 date_max <- lubridate::today() |> # 集計日
@@ -45,7 +46,7 @@ date_max <- lubridate::today() |> # 集計日
 date_max <- group_df |> 
   dplyr::filter(groupID %in% group_id) |> 
   dplyr::pull(dissolveDate) |> 
-  (\(val) {max(val, lubridate::today(), na.rm = TRUE)})() |> # 解散日or集計日
+  (\(vec) {max(vec, lubridate::today(), na.rm = TRUE)})() |> # 解散日or集計日
   lubridate::floor_date(unit = "month")
 
 
@@ -56,38 +57,25 @@ date_max <- group_df |>
 
 ### 演出用データの作成 -----
 
-# 加入前月, 卒業翌月のデータを作成:(バーの変化の強調用)
+# 卒業翌月のデータを作成:(バーの変化の強調用)
 outside_df <- join_df |> 
   dplyr::filter(groupID %in% group_id) |> # グループを抽出
   dplyr::mutate(
-    date_pre = (lubridate::day(joinDate) == 1) |> 
-      dplyr::if_else(
-        true  = joinDate |> 
-          lubridate::rollback() |> 
-          lubridate::floor_date(unit = "month"), # 加入日が月初なら加入前月
-        false = joinDate |> 
-          lubridate::floor_date(unit = "month") # 加入月
-      ), 
-    date_post = gradDate |> 
+    date = gradDate |> 
       lubridate::rollforward(roll_to_first = TRUE) # 卒業翌月
   ) |>　
-  tidyr::pivot_longer(
-    cols      = c(date_pre, date_post), 
-    names_to  = "date_type", 
-    values_to = "date"
-  ) |> # 月列をまとめる
   dplyr::filter(!is.na(date)) |> # 活動中なら卒業月を除去
-  dplyr::left_join(
-    color_df |> # メンバーカラー
-      dplyr::select(groupID, memberID, colorCode), 
-    by = c("groupID", "memberID")
-  ) |> 
   dplyr::mutate(
     memberName    = " ", 
-    member_period = 0
+    member_period = 0, 
+    period_years  = 0, 
+    period_months = 0
   ) |> # 疑似集計データを追加
-  dplyr::select(date, memberID, memberName, colorCode, member_period) |> 
-  dplyr::arrange(memberID, date)
+  dplyr::select(
+    date, memberID, groupID, memberName, 
+    member_period, period_years, period_months
+  ) |> 
+  dplyr::arrange(memberID, groupID, date)
 outside_df
 
 
@@ -100,7 +88,7 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
     gradDate = gradDate |> 
       is.na() |> 
       dplyr::if_else(
-        true  = max(lubridate::today(), date_max), # 活動中なら現在の日付or最大月
+        true  = max(lubridate::today(), date_max), # 活動中なら集計日or集計終了月
         false = gradDate
       )
   ) |> 
@@ -109,11 +97,6 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
       dplyr::select(memberID, memberName) |> 
       dplyr::distinct(memberID, .keep_all = TRUE), # 重複を除去
     by = "memberID"
-  ) |> 
-  dplyr::left_join(
-    color_df |> # メンバーカラー
-      dplyr::select(groupID, memberID, colorCode), 
-    by = c("groupID", "memberID")
   ) |> 
   dplyr::mutate(
     date_from = (lubridate::day(joinDate) == 1) |> 
@@ -128,26 +111,31 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
   ) |> 
   dplyr::reframe(
     date = seq(from = date_from, to = date_to, by = "month"), # 活動月
-    .by = c(memberID, groupID, joinDate, gradDate, memberName, colorCode)
+    .by = c(memberID, groupID, joinDate, gradDate, memberName)
   ) |> 
   dplyr::mutate(
     member_period = lubridate::interval(start = joinDate, end = date) |> 
       lubridate::time_length(unit = "month") |> 
-      floor() # メンバー活動月数
+      floor(), # メンバー活動月数
+    period_years  = member_period %/% 12, # メンバー活動年数
+    period_months = member_period %% 12   # メンバー活動月数 - 活動年数
   ) |> 
   dplyr::bind_rows(
-    outside_df # 加入前月, 卒業翌月
+    outside_df # 卒業翌月
+  ) |> 
+  dplyr::left_join(
+    color_df |> # メンバーカラー
+      dplyr::select(memberID, groupID, colorCode), 
+    by = c("memberID", "groupID")
   ) |> 
   dplyr::filter(date <= date_max) |> # 集計期間を抽出
   dplyr::arrange(date, joinDate, memberID) |> # 順位付け用
   dplyr::mutate(
-    period_years  = member_period %/% 12, # メンバー活動年数
-    period_months = member_period %% 12,  # メンバー活動月数 - 活動年数
-    ranking       = dplyr::row_number(), # 順位
+    ranking = dplyr::row_number(), # 順位
     .by = date
   ) |> 
   dplyr::select(
-    date, memberID, memberName, colorCode, joinDate, 
+    date, memberID, groupID, memberName, colorCode, joinDate, 
     member_period, period_years, period_months, ranking
   )
 rank_df
@@ -171,27 +159,28 @@ dummy_df <- rank_df |>
 dummy_df
 
 # 平均活動月数を集計
-mean_df <- rank_df |> 
+label_df <- rank_df |> 
+  dplyr::filter(!is.na(joinDate)) |> # 疑似データを除去
   dplyr::summarise(
-    max_period  = max(member_period, na.rm = TRUE),  # グループ最大活動月数
-    mean_period = mean(member_period, na.rm = TRUE), # グループ平均活動月数
-    member_num  = sum(memberName != " "),            # グループメンバー数
+    max_period  = max(member_period),  # グループ最大活動月数
+    mean_period = mean(member_period), # グループ平均活動月数
+    member_num  = dplyr::n(),          # グループメンバー数
     .by = date
-  ) |> # (疑似集計データを除いて計算)
+  ) |> 
   dplyr::mutate(
-    period_years  = mean_period %/% 12, # グループ平均活動年数
-    period_months = mean_period %% 12,  # グループ平均活動月数 - 活動年数
-    label = paste(
-      "メンバー数:", member_num, "人\n", 
-      "平均活動月数:", period_years, "年", round(period_months, digits = 1), "か月"
-    ), 
     max_period = (max_period == 0) |> 
       dplyr::if_else(
         true  = dummy_val, 
         false = max_period
-      ) # (初期表示範囲の調整用)
+      ), # (初期表示範囲の調整用)
+    period_years  = mean_period %/% 12, # グループ平均活動年数
+    period_months = mean_period %% 12,  # グループ平均活動月数 - 活動年数
+    label = paste(
+      "メンバー数:", "<span style='color:#ffffff;'>......</span>", member_num, "人<br>", # (スペースによる文字揃え)
+      "平均活動月数:", period_years, "年", round(period_months, digits = 1), "か月"
+    )
   )
-mean_df
+label_df
 
 
 ### アニメーションの作成 -----
@@ -206,7 +195,10 @@ s <- 1
 mps <- 3
 
 # フレーム数を取得
-n <- length(unique(rank_df[["date"]]))
+n <- rank_df |> 
+  dplyr::pull(date) |> 
+  unique() |> 
+  length()
 
 # ラベルの表示位置を設定
 max_rank <- rank_df |> 
@@ -221,14 +213,15 @@ anim <- ggplot() +
     color = "grey90", size = 0
   ) + # (初期表示範囲の調整用)
   geom_hline(
-    data    = mean_df, 
+    data    = label_df, 
     mapping = aes(yintercept = mean_period), 
     color = "black", linetype = "dashed"
   ) + # 平均活動月数線
-  geom_label(
-    data    = mean_df, 
+  ggtext::geom_textbox(
+    data    = label_df, 
     mapping = aes(x = max_rank+0.5, y = max_period, label = label), 
     hjust = 1, vjust = 0, color = "black", fill = "white", 
+    halign = 0, valign = 0.5, width = unit(2.25, units = "inch"), 
     size = 4
   ) + # 平均活動月数ラベル
   geom_bar(
@@ -278,7 +271,7 @@ anim <- ggplot() +
     title = paste0(group_name, "メンバーの活動月数の推移"), 
     subtitle = paste0(
       "{lubridate::year(closest_state)} 年 ", 
-      "{stringr::str_pad(lubridate::month(closest_state), width = 2, pad = 0)} 月 ", 
+      "{sprintf(fmt = '%02d', lubridate::month(closest_state))} 月 ", 
       "01 日時点"
     )#, 
     #caption = "データ:「https://github.com/xxgentaroxx/HP_DB」"
@@ -298,36 +291,6 @@ m <- gganimate::animate(
 # 歴代メンバーの在籍時の活動月数 -----------------------------------------------
 
 ## 加入から卒業以降も含めた活動月数の推移
-
-
-### 演出用データの作成 -----
-
-# 加入前月のデータを作成:(バーの変化の強調用)
-outside_df <- join_df |> 
-  dplyr::filter(groupID %in% group_id) |> # グループを抽出
-  dplyr::mutate(
-    date = (lubridate::day(joinDate) == 1) |> 
-      dplyr::if_else(
-        true  = joinDate |> 
-          lubridate::rollback() |> 
-          lubridate::floor_date(unit = "month"), # 加入日が月初なら加入前月
-        false = joinDate |> 
-          lubridate::floor_date(unit = "month") # 加入月
-      )
-  ) |>　
-  dplyr::left_join(
-    color_df |> # メンバーカラー
-      dplyr::select(groupID, memberID, colorCode), 
-    by = c("groupID", "memberID")
-  ) |> 
-  dplyr::mutate(
-    memberName    = " ", 
-    member_period = 0, 
-    add_label     = ""
-  ) |> # 疑似集計データを追加
-  dplyr::select(date, memberID, memberName, colorCode, member_period, add_label) |> 
-  dplyr::arrange(memberID, date)
-outside_df
 
 
 ### データの集計 -----
@@ -385,9 +348,6 @@ rank_df <- join_df |> # メンバーID, 加入日, 卒業日
         false = "(卒)"  # 卒業ラベル
       )
   ) |> 
-  dplyr::bind_rows(
-    outside_df # 加入前月, 卒業翌月
-  ) |> 
   dplyr::filter(date <= date_max) |> # 集計期間を抽出
   dplyr::arrange(date, -member_period, memberID) |> # 順位付け用
   dplyr::mutate(
@@ -420,6 +380,42 @@ dummy_df <- rank_df |>
   )
 dummy_df
 
+# 現役・卒業メンバーの数を集計
+label_df <- rank_df |> 
+  dplyr::mutate(
+    max_period = member_period |> 
+      max(), # グループ最大活動月数
+    .by = date
+  ) |> 
+  dplyr::summarise(
+    member_num = dplyr::n(), # メンバー数
+    .by = c(date, add_label, max_period)
+  ) |> 
+  tidyr::complete(
+    date = rank_df |> 
+      dplyr::pull(date) |> 
+      unique(), 
+    add_label = c("(現)", "(卒)"), 
+    fill = list(max_period = 0, member_num = 0)
+  ) |> # メンバー数0のデータを補完
+  dplyr::mutate(
+    max_period = (max(max_period) == 0) |> 
+      dplyr::if_else(
+        true  = dummy_val, 
+        false = max(max_period)
+      ), # (初期表示範囲の調整用)
+    .by = date
+  ) |> 
+  dplyr::reframe(
+    num_label = paste(
+      "現役メンバー数:", member_num[1], "人<br>", 
+      "卒業メンバー数:", member_num[2], "人"
+    ), 
+    .by = c(date, max_period)
+  ) |> 
+  dplyr::select(date, max_period, num_label)
+label_df
+
 
 ### アニメーションの作成 -----
 
@@ -433,7 +429,15 @@ s <- 1
 mps <- 3
 
 # フレーム数を取得
-n <- length(unique(rank_df[["date"]]))
+n <- rank_df |> 
+  dplyr::pull(date) |> 
+  unique() |> 
+  length()
+
+# ラベルの表示位置を設定
+max_rank <- rank_df |> 
+  dplyr::pull(ranking) |> 
+  max()
 
 # バーチャートレースを作図
 anim <- ggplot() + 
@@ -442,6 +446,13 @@ anim <- ggplot() +
     mapping = aes(x = max_rank+0.5, y = dummy_y), 
     color = "grey90", size = 0
   ) + # (初期表示範囲の調整用)
+  ggtext::geom_textbox(
+    data    = label_df, 
+    mapping = aes(x = max_rank+0.5, y = max_period, label = num_label), 
+    hjust = 1, vjust = 0, color = "black", fill = "white", 
+    halign = 0, valign = 0.5, width = unit(1.6, units = "inch"), 
+    size = 4
+  ) + # メンバー数ラベル
   geom_bar(
     data    = rank_df, 
     mapping = aes(
