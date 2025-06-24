@@ -8,7 +8,8 @@ library(tidyverse)
 # データの読込 -----------------------------------------------------------------
 
 # フォルダパスを指定
-dir_path <- "ChartRace/data/HP_DB-main/"
+dir_path <- "ChartRace/data/HP_DB-main/" # (ハロプロ用)
+dir_path <- "ChartRace/data/SP_DB/"      # (スタプラ用)
 
 # グループ一覧を読込
 group_df <- readr::read_csv(
@@ -55,7 +56,43 @@ member_df <- readr::read_csv(
   )
 ) |> 
   dplyr::arrange(memberID, HPjoinDate) # 昇順
+member_df <- readr::read_csv(
+  file = paste0(dir_path, "member.csv"), 
+  col_types = readr::cols(
+    memberID   = "i", 
+    memberName = "c", 
+    SPjoinDate = readr::col_date(format = "%Y/%m/%d"), # (スタプラ用)
+    debutDate  = readr::col_date(format = "%Y/%m/%d"), 
+    sPgradDate = readr::col_date(format = "%Y/%m/%d"), # (スタプラ用)
+    memberKana = "c", 
+    birthDate  = readr::col_date(format = "%Y/%m/%d")
+  )
+) |> 
+  dplyr::arrange(memberID, SPjoinDate) # 昇順
 member_df
+
+# メンバーカラー一覧を読込
+color_df <- readr::read_csv(
+  file = paste0(dir_path, "color.csv"), 
+  #locale = readr::locale(encoding = "CP932"), 
+  col_types = readr::cols(
+    groupID    = "i", 
+    groupName  = "c", 
+    memberID   = "i", 
+    memberName = "c", 
+    colorCode  = "c"
+  )
+) |> 
+  dplyr::mutate(
+    colorCode = colorCode |> 
+      is.na() |> 
+      dplyr::if_else(
+        true  = "gray", # 色を指定
+        false = colorCode
+      )
+  ) |> # メンカラなしの配色を設定
+  dplyr::arrange(groupID, memberID) # 昇順
+color_df
 
 
 # データの前処理 ---------------------------------------------------------------
@@ -66,11 +103,11 @@ member_df
 date_min <- "1997-09-01" |> 
   lubridate::as_date() |> 
   lubridate::floor_date(unit = "month") # 集計開始(最小)月
-date_max <- "2024-09-29" |> 
+date_max <- "2024-10-01" |> 
   lubridate::as_date() |> 
   lubridate::floor_date(unit = "month") # 集計終了(最大)月
-date_max <- lubridate::today()|> 
-  lubridate::floor_date(unit = "month") # 集計終了(最大)月
+#date_max <- lubridate::today()|> 
+#  lubridate::floor_date(unit = "month") # 集計終了(最大)月
 
 
 ### 演出用データの作成 -----
@@ -90,7 +127,7 @@ group_name_df <- group_df |>
   ) |> 
   dplyr::reframe(
     date = seq(from = date_from, to = date_to, by = "month"), # 活動月
-    .by = dplyr::everything()
+    .by = c(groupID, groupName, formDate, dissolveDate)
   ) |> 
   dplyr::slice_min(formDate, n = 1, with_ties = FALSE, by = c(date, groupID)) |> # 月途中の改名なら重複するので改名前を抽出
   dplyr::filter(dplyr::between(date, left = date_min, right = date_max)) |> # 集計期間の月を抽出
@@ -112,7 +149,7 @@ outside_df <- group_df |>
       dplyr::if_else(
         true = date_pre |> 
           lubridate::rollback() |> 
-          lubridate::floor_date(unit = "month"), # 結成月が月初なら結成前月
+          lubridate::floor_date(unit = "month"), # 結成日が月初なら結成前月
         false = date_pre
       ), 
     date_post = dissolveDate |> 
