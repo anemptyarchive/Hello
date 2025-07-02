@@ -1,5 +1,8 @@
 
-# ハロプロデータベースの読込 -----------------------------------------------------------
+# データベースの読込 -----------------------------------------------------------
+
+
+# パッケージの読込 -------------------------------------------------------------
 
 # 利用パッケージ
 library(tidyverse)
@@ -7,13 +10,27 @@ library(tidyverse)
 
 # データの読込 -----------------------------------------------------------------
 
-# フォルダパスを指定
-dir_path <- "ChartRace/data/HP_DB-main/" # (ハロプロ用)
-dir_path <- "ChartRace/data/SP_DB/"      # (スタプラ用)
+# ハロプロorスタプラを指定
+agcy_flag <- "hello"
+agcy_flag <- "star"
+
+# データフォルダを設定
+dat_path <- "ChartRace/data/"
+if(agcy_flag == "hello") {
+  
+  # ハロプロの場合
+  agcy_path <- paste0(dat_path, "HP_DB/")
+  
+} else if(agcy_flag == "star") {
+  
+  # スタプラの場合
+  agcy_path <- paste0(dat_path, "SP_DB/")
+  
+}
 
 # グループ一覧を読込
 group_df <- readr::read_csv(
-  file = paste0(dir_path, "group.csv"), 
+  file = paste0(agcy_path, "group.csv"), 
   col_types = readr::cols(
     groupID      = "i", 
     groupName    = "c", 
@@ -31,7 +48,7 @@ group_df
 
 # 加入・卒業日一覧を読込
 join_df <- readr::read_csv(
-  file = paste0(dir_path, "join.csv"), 
+  file = paste0(agcy_path, "join.csv"), 
   col_types = readr::cols(
     memberID = "i", 
     groupID  = "i", 
@@ -44,7 +61,7 @@ join_df
 
 # メンバー一覧を読込
 member_df <- readr::read_csv(
-  file = paste0(dir_path, "member.csv"), 
+  file = paste0(agcy_path, "member.csv"), 
   col_types = readr::cols(
     memberID   = "i", 
     memberName = "c", 
@@ -57,7 +74,7 @@ member_df <- readr::read_csv(
 ) |> 
   dplyr::arrange(memberID, HPjoinDate) # 昇順
 member_df <- readr::read_csv(
-  file = paste0(dir_path, "member.csv"), 
+  file = paste0(agcy_path, "member.csv"), 
   col_types = readr::cols(
     memberID   = "i", 
     memberName = "c", 
@@ -65,7 +82,8 @@ member_df <- readr::read_csv(
     debutDate  = readr::col_date(format = "%Y/%m/%d"), 
     sPgradDate = readr::col_date(format = "%Y/%m/%d"), # (スタプラ用)
     memberKana = "c", 
-    birthDate  = readr::col_date(format = "%Y/%m/%d")
+    birthDate  = readr::col_date(format = "%Y/%m/%d"), 
+    birthplace = "c"
   )
 ) |> 
   dplyr::arrange(memberID, SPjoinDate) # 昇順
@@ -73,26 +91,40 @@ member_df
 
 # メンバーカラー一覧を読込
 color_df <- readr::read_csv(
-  file = paste0(dir_path, "color.csv"), 
+  file = paste0(agcy_path, "color.csv"), 
   #locale = readr::locale(encoding = "CP932"), 
   col_types = readr::cols(
-    groupID    = "i", 
-    groupName  = "c", 
-    memberID   = "i", 
-    memberName = "c", 
-    colorCode  = "c"
+    groupID     = "i", 
+    groupName   = "c", 
+    memberID    = "i", 
+    memberName  = "c", 
+    memberColor = "c"
   )
 ) |> 
   dplyr::mutate(
-    colorCode = colorCode |> 
+    memberColor = memberColor |> 
       is.na() |> 
       dplyr::if_else(
         true  = "gray", # 色を指定
-        false = colorCode
+        false = memberColor
       )
   ) |> # メンカラなしの配色を設定
   dplyr::arrange(groupID, memberID) # 昇順
 color_df
+
+# 都道府県名の対応表を読込
+reg_df <- readr::read_csv(
+  file = paste0(dat_path, "common/region.csv"), 
+  col_types = readr::cols(
+    prefecture_en = "c", 
+    prefecture_jp = "c", 
+    capital_en    = "c", 
+    capital_jp    = "c", 
+    latitude      = "d", 
+    longitude     = "d"
+  )
+)
+reg_df
 
 
 # データの前処理 ---------------------------------------------------------------
@@ -177,6 +209,10 @@ member_df |>
   dplyr::filter(n > 1) # 重複データを抽出
 member_df |> 
   dplyr::filter(HPjoinDate > debutDate)
+
+# 生年月日非公開メンバー
+member_df |> 
+  dplyr::filter(is.na(birthDate))
 
 df <- join_df |> 
   dplyr::left_join(member_df, by = "memberID", relationship = "many-to-many") |> 
