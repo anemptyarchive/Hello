@@ -387,6 +387,7 @@ map_df
 
 # 総メンバー数を集計
 label_df <- count_df |> 
+  dplyr::filter(date <= date_max) |> # 集計期間を抽出
   dplyr::summarise(
     member_num = sum(member_num), # 総メンバー数
     .by = date
@@ -398,6 +399,7 @@ label_df
 
 # ラベルの表示位置を設定
 count_label_df <- count_df |> 
+  dplyr::filter(date <= date_max) |> # 集計期間を抽出
   dplyr::left_join(
     reg_df |> # 経度, 緯度
       dplyr::select(region = prefecture_en, long = longitude, lat = latitude), 

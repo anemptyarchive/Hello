@@ -53,6 +53,7 @@ date_max <- group_df |>
   dplyr::pull(dissolveDate) |> 
   (\(vec) {max(vec, lubridate::today(), na.rm = TRUE)})() |> # 解散日or実行日
   lubridate::floor_date(unit = "month")
+date_max
 
 
 # 現役メンバーの活動日数 -------------------------------------------------------
@@ -154,6 +155,7 @@ rank_df <- join_df |> # メンバーID, グループID, 加入日, 卒業日
       dplyr::select(groupID, memberID, memberColor), 
     by = c("groupID", "memberID")
   ) |> 
+  dplyr::filter(date <= date_max) |> # 集計期間を抽出
   dplyr::arrange(date, joinDate, memberID, groupID) |> # 順位付け用
   dplyr::mutate(
     ranking = dplyr::row_number(), # 順位
